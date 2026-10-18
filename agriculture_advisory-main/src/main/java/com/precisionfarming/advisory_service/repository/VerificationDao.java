@@ -58,6 +58,22 @@ public class VerificationDao {
     }
 
     /**
+     * PART 4: reads the account's row WHILE HOLDING A ROW LOCK, so the send
+     * rate limit can be checked and the counter updated in one atomic step.
+     * MUST be called inside a transaction (the lock is held until it commits).
+     *
+     * Two concurrent resends therefore run one after the other: the first
+     * records last_sent_at, the second then sees it and is refused - the same
+     * guarantee the old `synchronized` gave, but now held by the database so it
+     * also works across several app instances. When no row exists yet the
+     * statement still locks the matching index gap, so a first send waits too.
+     */
+    public Optional<EmailVerification> lockEmail(Long userId) {
+        return jdbc.query("SELECT * FROM email_verification WHERE user_id = ? FOR UPDATE", EMAIL_MAPPER, userId)
+                .stream().findFirst();
+    }
+
+    /**
      * Stores a fresh token and records the send in the rate-limit window.
      * `verified_at` is deliberately NOT touched, so re-sending a link can never
      * silently un-verify an address.

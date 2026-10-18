@@ -85,6 +85,8 @@ public class VerifyController {
             model.addAttribute("notice", msg("verify.email.sent", locale));
         } else if (sendStatus != null) {
             model.addAttribute("notice", sendMessage(sendStatus, locale));
+            // A failed mail send is shown as a WARNING (not a green "sent" box).
+            model.addAttribute("noticeWarn", "MAIL_FAILED".equals(sendStatus));
         }
         return "pages/verify-email";
     }
@@ -109,10 +111,16 @@ public class VerifyController {
             return "redirect:/verify/email?h=" + handle + "&r=" + dispatch.status().name();
         }
         if (dispatch.demo()) {
-            // Demo mode: carry the link through ONE redirect (flash attribute) so
-            // the token is never written into the address bar.
+            // No email was delivered (no SMTP, or a send that failed): carry the
+            // link through ONE redirect (flash attribute) so the token is never
+            // written into the address bar.
             flash.addFlashAttribute("demoLink",
                     baseUrl(request) + "/verify/email/confirm?token=" + dispatch.token());
+        }
+        if (dispatch.sendFailed()) {
+            // PART 4: tell the truth instead of claiming a delivery that failed.
+            // The link above is shown and the resend button stays available.
+            return "redirect:/verify/email?h=" + handle + "&r=MAIL_FAILED";
         }
         return "redirect:/verify/email?h=" + handle + "&sent=1";
     }
@@ -160,6 +168,7 @@ public class VerifyController {
         return switch (status) {
             case "TOO_SOON" -> msg("verify.email.too_soon", locale);
             case "LIMIT" -> msg("verify.email.limit", locale);
+            case "MAIL_FAILED" -> msg("verify.email.send_failed", locale);
             default -> msg("verify.email.sent", locale);
         };
     }

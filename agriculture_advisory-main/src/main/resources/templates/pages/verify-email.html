@@ -53,8 +53,12 @@
         </div>
         <div class="tile__body">
 
-            <div class="alert alert--success" th:if="${notice != null}">
-                <span aria-hidden="true">&#9989;</span>
+            <!-- PART 4: a failed mail send uses the WARNING style/icon; a normal
+                 "link sent" notice keeps the green success style. -->
+            <div class="alert" th:classappend="${noticeWarn} ? 'alert--warning' : 'alert--success'"
+                 th:if="${notice != null}">
+                <span aria-hidden="true" th:if="${noticeWarn}">&#9888;</span>
+                <span aria-hidden="true" th:unless="${noticeWarn}">&#9989;</span>
                 <span th:text="${notice}">The verification link has been sent.</span>
             </div>
 

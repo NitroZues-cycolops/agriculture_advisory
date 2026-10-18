@@ -26,7 +26,7 @@
      - The page scrolls as a whole     -> section 2 (body overflow)
      - Broken layout on a phone        -> section 7 (the @media block)
    SECTION MAP: 1 VARIABLES | 2 BASE | 3 TOP BAR | 4 TILE + CARD | 5 LAYOUTS
-                6 COMPONENTS | 7 RESPONSIVE
+                6 COMPONENTS | 7 RESPONSIVE | 8 MOTION
    ===================================================================== */
 
 
@@ -88,15 +88,26 @@
 
 html {
     height: 100%;
+    /* UI step 1: reserve the scrollbar strip on every page, so the layout never
+       jumps sideways when the page scrollbar appears or disappears. */
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;                              /* Firefox            */
+    scrollbar-color: var(--border-strong) transparent;  /* Firefox            */
 }
 
-/* The desktop page never scrolls: only .main-container does.
+/* UI step 1: the WHOLE PAGE scrolls - one vertical scrollbar on the document.
+   Before this, body was a fixed 100vh box with overflow:hidden and the ONLY
+   scroller was .main-container, so its scrollbar appeared inset from the window
+   edge (the "scrollbar in the middle right") and the wheel did nothing over the
+   top bar or footer. Now tiles grow with their content and the document is the
+   single scroller.
    Background = near-black navy + two soft radial glows + a faint dot grid. */
 body {
-    height: 100vh;
+    min-height: 100vh;          /* fallback for older browsers                 */
+    min-height: 100dvh;         /* the real visible height on phones           */
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;          /* the document scrolls; nothing traps the wheel */
     background-color: var(--bg);
     background-image:
         radial-gradient(circle at 12% 0%,   rgba(124, 58, 237, 0.18), transparent 45%),
@@ -109,6 +120,34 @@ body {
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+}
+
+/* UI step 1: the one page scrollbar, themed to match the dark surface. The
+   thumb sits inside a transparent track (background-clip) so it reads as a
+   floating pill rather than a full-width bar. */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent);
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 a {
@@ -222,7 +261,6 @@ button {
     letter-spacing: 0.06em;
     color: var(--text-dim);
     border-radius: var(--radius-sm);
-    transition: color 0.25s ease;
 }
 
 .workspace-btn::after {
@@ -235,7 +273,6 @@ button {
     height: 3px;                            /* the 3px active underline */
     background: var(--accent);
     border-radius: 2px;
-    transition: width 0.25s ease;
 }
 
 .workspace-btn:hover,
@@ -345,16 +382,16 @@ button {
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
     outline: none;
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-/* ACTIVE TILE: mouse hover or keyboard focus (tiles carry tabindex="0"). */
+/* ACTIVE TILE: mouse hover or keyboard focus (tiles carry tabindex="0").
+   The -2px "lift" is motion, so it lives in section 8 (MOTION) and only applies
+   when the visitor has not asked for reduced motion. */
 .tile:hover,
 .tile:focus,
 .tile:focus-within {
     border-color: var(--accent);
     box-shadow: 0 0 16px var(--accent-glow), var(--shadow-card);
-    transform: translateY(-2px);            /* the reference card lift */
 }
 
 /* the thin Hyprland title bar: "[2] Nowcast" */
@@ -383,12 +420,15 @@ button {
     text-overflow: ellipsis;
 }
 
-/* only the inside of a tile scrolls */
+/* UI step 1: a tile body GROWS with its content - it is no longer its own
+   scroll region. That removed the extra "random" scrollbar that appeared inside
+   whichever tile happened to be the tallest, and it means the mouse wheel always
+   scrolls the page. Wide tables/code still scroll sideways in their own wrapper. */
 .tile__body {
     flex: 1 1 auto;
     min-height: 0;
     padding: 24px;
-    overflow: auto;
+    overflow: visible;
 }
 
 /* centred card body: emoji icon, title, description, pill button */
@@ -416,12 +456,6 @@ button {
     border-radius: 50%;
     box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.03);
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.tile:hover .card__icon,
-.tile:focus-within .card__icon {
-    transform: translateY(-4px) scale(1.08);
 }
 
 .card__title {
@@ -452,18 +486,11 @@ button {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: color 0.25s ease, border-color 0.25s ease,
-                box-shadow 0.25s ease, background 0.25s ease;
 }
 
 /* the arrow on the pill (CSS only, no icon font) */
 .card__btn::after {
     content: '\2192';
-    transition: transform 0.25s ease;
-}
-
-.tile:hover .card__btn::after {
-    transform: translateX(4px);
 }
 
 .card__btn:hover,
@@ -478,7 +505,9 @@ button {
 
 /* ========== 5. LAYOUTS ========== */
 /* Every layout is a centred flex-wrap container: content-sized cards, never a
-   stretched empty tile.  .main-container is the only scrollable region. */
+   stretched empty tile. UI step 1: .main-container is NOT a scroll region any
+   more - the document is - so there is exactly ONE scrollbar and it sits at the
+   window's right edge instead of inset inside this container's own padding. */
 .main-container {
     flex: 1 1 auto;
     min-height: 0;
@@ -488,7 +517,7 @@ button {
     gap: var(--gap);
     justify-content: center;
     align-content: flex-start;
-    overflow: auto;
+    overflow: visible;
 }
 
 /* --- layout-home: header tile + one card per workspace (2-7).
@@ -595,8 +624,6 @@ button {
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-pill);
-    transition: color 0.25s ease, border-color 0.25s ease,
-                box-shadow 0.25s ease, background 0.25s ease;
 }
 
 .btn:hover,
@@ -674,7 +701,6 @@ button {
     background: var(--surface-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .form-row textarea {
@@ -951,11 +977,10 @@ button {
 }
 
 .map-svg .district {
-    fill: var(--band, #64748b);    /* the colour comes from a .band-*/.crop-* */
+    fill: var(--band, #64748b);    /* the colour comes from a .band-* or .crop-* class */
     stroke: #06121f;
     stroke-width: 0.8;
     cursor: pointer;
-    transition: stroke-width 0.2s ease, stroke 0.2s ease;
 }
 
 .map-svg a:hover .district,
@@ -1372,11 +1397,8 @@ button {
    collapses behind a CSS-only checkbox menu (no JavaScript). */
 @media (max-width: 800px) {
 
-    body {
-        height: auto;
-        min-height: 100vh;
-        overflow: auto;
-    }
+    /* UI step 1: no body override needed any more - the document is already the
+       single scroller at every width (see section 2). */
 
     /* --- compact top bar --- */
     .topbar__bar {
@@ -1456,5 +1478,92 @@ button {
 
     .tile__body {
         overflow: visible;      /* the page scrolls instead of the tile */
+    }
+}
+
+/* 7b. PART 3: the unread-message badge in the top bar ---------------------
+   A small accent pill shown next to the Messages link while unreadCount > 0.
+   It is only a new class; no existing rule was changed. */
+.nav-badge {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #05121a;
+    font-size: .75rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+/* ========== 8. MOTION ==========
+   Every transition and every hover/focus transform lives here and nowhere
+   else. It is all inside @media (prefers-reduced-motion: no-preference), so a
+   visitor whose system asks for less motion gets a completely still page -
+   no fades, no lifts, no sliding arrows - while the colours and focus rings
+   (which never move) keep working for everyone.
+   Add new animation here, never in the rules above; there is a matching note
+   at the top of the file. */
+@media (prefers-reduced-motion: no-preference) {
+
+    /* --- the tiles: a gentle lift + colour change on hover / keyboard focus -- */
+    .tile {
+        transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .tile:hover,
+    .tile:focus,
+    .tile:focus-within {
+        transform: translateY(-2px);
+    }
+
+    /* --- the round icon at the top of a home card pops up under the pointer -- */
+    .card__icon {
+        transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .tile:hover .card__icon,
+    .tile:focus-within .card__icon {
+        transform: translateY(-4px) scale(1.08);
+    }
+
+    /* --- the "Open" pill: its colour eases, and its arrow slides right ------ */
+    .card__btn {
+        transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .card__btn::after {
+        transition: transform 0.25s ease;
+    }
+
+    .tile:hover .card__btn::after {
+        transform: translateX(4px);
+    }
+
+    /* --- the numbered workspace links: colour eases, underline grows --------- */
+    .workspace-btn {
+        transition: color 0.25s ease;
+    }
+
+    .workspace-btn::after {
+        transition: width 0.25s ease;
+    }
+
+    /* --- every button and every form field eases its colour ------------------- */
+    .btn {
+        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .form-row input,
+    .form-row select,
+    .form-row textarea {
+        transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    /* --- the map districts thicken their outline as the pointer passes ------- */
+    .map-svg .district {
+        transition: stroke-width 0.2s ease, stroke 0.2s ease;
     }
 }

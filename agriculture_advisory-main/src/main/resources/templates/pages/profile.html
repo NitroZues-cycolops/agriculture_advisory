@@ -317,6 +317,39 @@
     </div>
     <!-- TILE END: profile-posts -->
 
+    <!-- TILE START: profile-connections | controller: ProfileController | PART 3 -->
+    <div class="tile tile--span" id="tile-profile-connections">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{profile.connections}">[7] Connections</span>
+        </div>
+        <div class="tile__body">
+            <p class="form-hint" th:text="#{profile.connections.intro}">The farmers you are connected with. You can chat with anyone you follow, or who follows you.</p>
+
+            <p class="card__text"
+               th:if="${followingCount == 0 and followerCount == 0 and connectionCount == 0}"
+               th:text="#{profile.connections.empty}">You have not connected with anyone yet. Use Find farmers to follow someone.</p>
+
+            <h2 class="form-hint" th:text="#{profile.following} + ' (' + ${followingCount} + ')'">Following (0)</h2>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(followingList)}">
+                <div th:each="m : ${followingList}"
+                     th:replace="~{fragments/person :: card(${m}, ${me}, ${followingIds}, '/profile')}"></div>
+            </div>
+
+            <h2 class="form-hint" th:text="#{profile.followers} + ' (' + ${followerCount} + ')'">Followers (0)</h2>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(followerList)}">
+                <div th:each="m : ${followerList}"
+                     th:replace="~{fragments/person :: card(${m}, ${me}, ${followingIds}, '/profile')}"></div>
+            </div>
+
+            <h2 class="form-hint" th:text="#{profile.connections} + ' (' + ${connectionCount} + ')'">Connections (0)</h2>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(connectionList)}">
+                <div th:each="m : ${connectionList}"
+                     th:replace="~{fragments/person :: card(${m}, ${me}, ${followingIds}, '/profile')}"></div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: profile-connections -->
+
 </th:block>
 
 </body>

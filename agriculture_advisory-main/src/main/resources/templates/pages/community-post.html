@@ -86,7 +86,7 @@
                     <input type="hidden" name="back" th:value="${'/community/post/' + post.id}">
                     <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
                 </form>
-                <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${post.userId})}"
+                <a class="btn btn--ghost" th:href="@{/messages/{id}(id=${post.userId})}"
                    th:text="#{community.message}">Message</a>
             </div>
         </div>

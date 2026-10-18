@@ -46,7 +46,7 @@
                     <button type="submit" class="btn btn--danger"
                             th:text="#{community.delete.confirm}">Yes, delete</button>
                 </form>
-                <a class="btn" th:href="@{/community/messages/{id}(id=${otherId})}"
+                <a class="btn" th:href="@{/messages/{id}(id=${otherId})}"
                    th:text="#{common.cancel}">Cancel</a>
             </p>
         </div>

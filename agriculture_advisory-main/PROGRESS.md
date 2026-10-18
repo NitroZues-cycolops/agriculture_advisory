@@ -815,3 +815,211 @@ Assumptions (viva notes):
 - Compile/run verification is DEFERRED: this machine has NO JDK, NO Maven, NO MySQL, NO Git and NO
   Bash, so nothing was compiled, run or SQL-tested. Every change was verified by READING the files and
   by GREP / static checks only (the five cross-checks below).
+
+## PART 3 — Connections and chat
+
+Goal: a farmer can find other farmers, follow them, see who they are connected with, and have a private
+conversation - with an unread badge in the top bar, clear rules about who may chat, and limits on what
+a message may contain and how fast it may be sent. NO JavaScript: every action is a link or a POST form.
+
+Done (what changed):
+- **Find farmers** - `GET /farmers` is a directory of every other farmer (name search + district
+  filter, both plain GET params so the URL is shareable). Each card is the shared **person card**
+  (`fragments/person :: card`): avatar, name, district, taluka, crops, plus **View profile**, **Chat**
+  and **Follow / Unfollow**. It NEVER shows another user's phone or email.
+- **Inbox** - `GET /messages` lists one row per farmer you have exchanged messages with, newest first,
+  with the last message, its time and an "N unread" tag. Empty state: `messages.inbox.empty`.
+- **Thread** - `GET /messages/{id}` shows both sides of the conversation, oldest at the top, my own
+  bubbles to the right, and a send form. Opening it **marks the incoming messages read**. There is no
+  live update, so a visible **Refresh** link re-requests the page (no JavaScript).
+- **Send** - `POST /messages/{id}` validates the text (1..1000 characters; empty or over-long is
+  refused with the message KEPT and the error beside the field) and enforces a **20-messages-per-minute**
+  rate limit. On success it redirects back to the thread.
+- **Who may chat** - a farmer may chat with anyone they FOLLOW **or** who FOLLOWS them
+  (`CommunityDao.canChat`, one-way is enough). Opening or posting to a non-connected farmer -> the
+  friendly **"You cannot message this farmer yet"** page (`messages-blocked.html`) with HTTP **403**
+  and a Follow button. A thread with **yourself** redirects to the inbox (GET) and is refused on POST (403).
+- **Unread badge** - `config/UnreadBadgeAdvice` is a `@ControllerAdvice` that puts `unreadCount` (one
+  cheap `COUNT`) into every model; the top bar shows a **Messages** link with an unread badge
+  (`fragments/topbar.html` + the new `.nav-badge` rule in `style.css`). Anonymous users always see 0.
+- **Connections** - `/profile` gains a **Connections** tile: **Following**, **Followers** and
+  **Connections** (a connection = a MUTUAL follow), each rendered with the shared person card.
+- **Route clean-up** - the canonical chat lives at `/messages`; every `/community/messages` link was
+  repointed, the orphaned `community-inbox.html` / `community-thread.html` were DELETED, and the old
+  dead inbox link on `/community` now points at `/messages` (with the live unread tag).
+
+Files changed:
+- `src/main/java/.../controller/CommunityController.java` — the `/messages` (inbox, thread, send) and
+  `/farmers` routes; `MAX_CONTENT = 1000`, `RATE_LIMIT = 20`; `messages-blocked.html` on a forbidden chat.
+- `src/main/java/.../repository/CommunityDao.java` — `following`, `followers`, `connections` (mutual),
+  `canChat`, `searchFarmers`, `inbox` (with per-row unread), `thread`, `insertMessage`, `markRead`,
+  `unreadCount`, `sentInLastMinute`, `displayName`, and `findMember`.
+- NEW `src/main/java/.../config/UnreadBadgeAdvice.java` — the `unreadCount` model attribute (0 for anonymous).
+- `src/main/java/.../controller/ProfileController.java` — adds `followingList`, `followerList`,
+  `connectionList`, their counts and `followingIds` to the `/profile` model.
+- `src/main/resources/templates/pages/messages-inbox.html`, `messages-thread.html`,
+  `messages-blocked.html`, `farmers.html` — the PART 3 pages.
+- NEW `src/main/resources/templates/fragments/person.html` — the reusable farmer card (no phone/email).
+- `src/main/resources/templates/pages/profile.html` — the **Connections** tile.
+- `src/main/resources/templates/fragments/topbar.html` — the Messages link with the unread badge.
+- `src/main/resources/templates/pages/community.html`, `community-post.html`, `community-profile.html`,
+  `community-message-delete.html` — message links repointed to `/messages` (+ "Find farmers" link).
+- `src/main/resources/static/css/style.css` — the new `.nav-badge` rule (section 7b; no existing rule changed).
+- DELETED `src/main/resources/templates/pages/community-inbox.html` and `community-thread.html` (superseded).
+- `src/main/resources/messages.properties`, `messages_en.properties`, `messages_hi.properties`,
+  `messages_mr.properties` — 31 new keys in ALL FOUR bundles (real Hindi and Marathi). All four bundles
+  now hold the SAME 614 keys (checked: identical key sets, no duplicates).
+- `smoke_test.sh` — new section `13d. PART 3` (17 checks) + the direct-message URL moved to `/messages`.
+- `PROGRESS.md` — this section.
+
+New message keys (English values; identical keys in all four bundles):
+```
+messages.title=Messages
+messages.inbox.empty=No messages yet. Find a farmer to chat with.
+messages.inbox.unread={0} unread
+messages.inbox.open=Open
+messages.thread.title=Conversation with {0}
+messages.thread.refresh=Refresh
+messages.thread.empty=No messages yet - write the first one.
+messages.thread.you=You
+messages.thread.type=Your message
+messages.thread.send=Send
+messages.blocked.title=You cannot message this farmer yet
+messages.blocked.body=Follow {0} to start a conversation. You can chat with the farmers you follow, or with farmers who follow you.
+messages.blocked.back=Back to messages
+messages.send.empty=Please write a message first.
+messages.send.long=Your message is too long (1000 characters at most).
+messages.send.rate=You are sending messages too quickly. Please wait a minute and try again.
+farmers.title=Find farmers
+farmers.intro=Search for other farmers and follow them, then start a conversation from the Messages page.
+farmers.link=Find farmers
+farmers.search.label=Name
+farmers.district.label=District
+farmers.district.all=All districts
+farmers.search.submit=Search
+farmers.empty=No farmers match your search.
+farmers.count={0} farmer(s)
+person.view=View profile
+person.chat=Chat
+profile.connections=Connections
+profile.following=Following
+profile.followers=Followers
+profile.connections.intro=The farmers you are connected with. You can chat with anyone you follow, or who follows you.
+profile.connections.empty=You have not connected with anyone yet. Use Find farmers to follow someone.
+```
+
+SQL: **none.** PART 3 adds no tables and no columns. It reuses the existing `follows` and
+`direct_messages` tables (`direct_messages.is_read` drives the badge; `created_at >= NOW() - INTERVAL 1
+MINUTE` drives the rate limit). Nothing is DROPped.
+
+Smoke checks added (`smoke_test.sh`, section `13d. PART 3`, 17 checks):
+- `/farmers` -> 200 with no missing keys and lists another farmer; the name search filters (an impossible
+  name shows the empty state); the district filter round-trips.
+- farmer2 writes to me -> stored and **unread** for me.
+- `/messages` -> 200, no missing keys, lists the conversation.
+- the top bar shows the **unread badge** while a message is unread.
+- opening the thread -> 200, no missing keys, its messages are marked read and the badge **disappears**.
+- a non-connected farmer's thread -> **403** (blocked page); opening my OWN thread -> **302**; POSTing to
+  myself -> **403**; POSTing to a non-connected farmer -> **403**.
+- an empty message and a 1000+ character message are each refused (200 with an error, **no row stored**).
+- the 20-per-minute ceiling is reached and the 21st message is refused (no row stored).
+- a mutual follow is a **connection** (1 row) and `/profile` shows the **Connections** tile with the
+  connected farmer; chat permission is symmetric (a follower may open my thread -> 200).
+
+Assumptions (viva notes):
+- **Who may chat** is deliberately one-way: follow someone, OR be followed by them, and you may chat.
+  A **connection** (for the profile tile) is stricter: BOTH directions must follow.
+- The **rate limit** needs no extra table: "how many did this user send in the last minute" is one
+  indexed `COUNT` over `direct_messages`.
+- The **unread badge** is a single `COUNT` per request via `@ControllerAdvice`; it is 0 for anonymous
+  visitors and never breaks a page if a user is not logged in.
+- Reading a thread is what clears the badge (opening the conversation == reading it); there is no
+  JavaScript "mark as read".
+- The old `/community/inbox` and `/community/thread` templates were deleted because the canonical chat
+  is `/messages`; leaving them would be dead, unmaintained duplicates.
+- Compile/run verification stays DEFERRED on this machine (no JDK / Maven / MySQL / Git / Bash):
+  PART 3 was verified by READING the files and by GREP / static checks only.
+
+## PART 4 — Email robustness and concurrency
+
+Goal: the verification email must behave correctly when two requests arrive at once, must never hang or
+return a 500 when the mail server is slow or down, and must build a link that points at a host the
+reader can actually open. NO JavaScript, no datasource change, no new tables.
+
+Reproduce first (what was already true): the request-derived base URL (`ServletUriComponentsBuilder`),
+the reused-link **"already verified"** message, the unknown-token **"not valid"** message and the
+never-500 demo fallback were ALL already correct from PART 1 — nothing was changed there.
+
+Done (what changed):
+- **Removed `synchronized`** from `EmailVerificationService.send`. The class-level lock only helped a
+  single instance and blocked every user during a send.
+- **Atomic rate limit.** The check ("may this account get a new link now?") and the record (write the
+  token + bump `last_sent_at` / `sends_in_window`) now run together inside **one short database
+  transaction** that locks the account's row with **`SELECT ... FOR UPDATE`** (new
+  `VerificationDao.lockEmail`). Two simultaneous resends are serialised by the database, so only the
+  first is accepted (the second sees the fresh `last_sent_at` and is refused) — and the rule now holds
+  across **several app instances**, which `synchronized` never could.
+- **SMTP outside the transaction.** `JavaMailSender.send` runs **after** the transaction has committed.
+  A slow or dead mail server therefore never holds a database lock and never delays other users. A
+  `RuntimeException` from the mail layer is caught, logged without secrets, and the link is shown on
+  the page instead — so a mail failure is **never a 500** and the account can still be verified.
+- **Honest failure message.** `Dispatch` gained a `sendFailed` flag, so a send that was ATTEMPTED and
+  failed is no longer reported as "The verification link has been sent." The resend page then shows a
+  new **warning** notice (`verify.email.send_failed`, in the existing `.alert--warning` style) that says
+  the email could not be sent, while the link and the resend button stay on the page. Plain demo mode
+  (no SMTP configured) still shows the normal green notice.
+- **SMTP timeouts.** Added (as properties ONLY) `spring.mail.properties.mail.smtp.connectiontimeout`,
+  `.timeout` and `.writetimeout` = **5000 ms**, so a hanging mail server fails fast instead of blocking
+  a request for minutes.
+- **Base-URL sanity check.** A one-off `ApplicationReadyEvent` listener logs a clear **warning** when a
+  real mail server is configured (`spring.mail.host` set) but `app.base-url` is blank, because the link
+  would then be built from whatever host the request used (usually wrong behind a proxy). Booting is
+  never blocked for the college demo.
+
+Files changed:
+- `src/main/java/.../service/EmailVerificationService.java` — `send` is no longer `synchronized`; the
+  check + record run in a `TransactionTemplate` over `dao.lockEmail(...)`; the SMTP send is outside;
+  `Dispatch` gains a `sendFailed` flag; new private `Attempt` record and the `warnIfBaseUrlMissing`
+  start-up listener; class Javadoc updated.
+- `src/main/java/.../repository/VerificationDao.java` — NEW `lockEmail(userId)` (`SELECT ... FOR UPDATE`).
+- `src/main/java/.../controller/VerifyController.java` — the resend flow redirects to `&r=MAIL_FAILED`
+  when the send failed and puts `noticeWarn` in the model so the page styles it as a warning.
+- `src/main/resources/templates/pages/verify-email.html` — the notice box switches to the existing
+  `.alert--warning` class and a warning icon for a failed send (no new CSS).
+- `src/main/resources/application.properties` — **ADDED** the three SMTP timeout properties (datasource
+  untouched; `spring.sql.init.mode` stays `never`).
+- `src/main/resources/messages.properties`, `messages_en.properties`, `messages_hi.properties`,
+  `messages_mr.properties` — **1 new key** (`verify.email.send_failed`) in ALL FOUR bundles with real
+  Hindi and Marathi; all four now hold the SAME **615 keys** (checked: identical counts, no duplicates).
+- `smoke_test.sh` — new section `3c. PART 4` (5 checks) + the header note.
+- `PROGRESS.md` — this section.
+
+SQL: **none.** PART 4 adds no table and no column; the row lock uses the existing
+`email_verification` row (`UNIQUE KEY uq_email_verif_user (user_id)` — the lock target). Nothing is DROPped.
+
+SAMPLE / no invented facts: the new notice only states that the email could not be sent; it makes no
+claim about delivery and adds no external data.
+
+Smoke checks added (`smoke_test.sh`, section `3c. PART 4`, 5 checks):
+- a fresh unverified account is created for the concurrency test.
+- two resends fired at the **same time** -> **exactly one** is accepted and there is exactly one
+  `email_verification` row (the once-a-minute rule holds under concurrency).
+- the accepted reply's **demo link is absolute and uses the request's own host:port** (proof it is
+  built from the request, never hard-coded).
+- static guards: `EmailVerificationService` no longer contains `synchronized`; `VerificationDao`
+  contains `SELECT ... FOR UPDATE`; `application.properties` sets all three SMTP timeouts.
+
+Assumptions (viva notes):
+- Why a **database** lock and not `synchronized`? A JVM lock only guards one process; the rule must
+  also hold when a second instance answers the same request (load balancer / restart overlap). The
+  `SELECT ... FOR UPDATE` on the row is the one place all instances agree on.
+- Why is the SMTP call **outside** the transaction? Sending mail is I/O that can take seconds or fail;
+  holding a row lock for that long would serialise unrelated users and risk lock-timeout errors. The
+  transaction is tiny (read a row, write a row) and commits before any network call.
+- Why does a mail failure still show the link? It is the friendlier of the two safe outcomes: no 500,
+  no lost account. With SMTP configured this only happens when delivery fails; the user may also ask
+  for another link once the minute passes.
+- The row-lock read on a **missing** row still takes the index gap lock, so a genuine first send is
+  serialised too — no special-casing of "no row yet".
+- Compile/run verification stays DEFERRED on this machine (no JDK / Maven / MySQL / Git / Bash):
+  PART 4 was verified by READING the files and by GREP / static checks only.

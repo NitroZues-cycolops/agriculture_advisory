@@ -54,6 +54,18 @@
             <a class="btn btn--ghost" sec:authorize="hasRole('OWNER')"
                th:href="@{/owner}" th:text="#{owner.panel}">Owner</a>
 
+            <!-- PART 3: Messages with the unread badge. unreadCount comes from
+                 UnreadBadgeAdvice (a single COUNT) and is 0 for anonymous
+                 visitors, so the badge is simply hidden until there is something
+                 unread. -->
+            <a class="btn btn--ghost"
+               th:if="${#authentication != null and #authentication.name != 'anonymousUser'}"
+               th:href="@{/messages}">
+                <span th:text="#{messages.title}">Messages</span>
+                <span class="nav-badge" th:if="${unreadCount > 0}"
+                      th:text="${unreadCount}">3</span>
+            </a>
+
             <!-- Logged in: username + Logout (POST, so CSRF applies) -->
             <span class="topbar__user"
                   th:if="${#authentication != null and #authentication.name != 'anonymousUser'}"

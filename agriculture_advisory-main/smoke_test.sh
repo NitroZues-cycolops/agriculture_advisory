@@ -30,6 +30,15 @@
 #  13c. PART 2b: manage my own content - edit my post, delete my post (comments
 #      and votes cascade, photo file removed), the delete confirmation needs POST
 #      + CSRF (a GET deletes nothing), delete my own comment and chat message.
+#  13d. PART 3: connections and chat - the /farmers directory (name + district
+#      filters), the /messages inbox and the top-bar unread badge (cleared by
+#      opening a thread), who may chat (a one-way follow is enough / mutual =
+#      connection), no self-chat, and the text rules plus the 20-per-minute rate
+#      limit.
+#  13e. PART 4: email robustness - two simultaneous resends never both pass the
+#      once-a-minute rule (the check + record run in one locked DB transaction),
+#      the demo link is built from the request's own host:port, and the SMTP
+#      timeouts / row lock are present in the source and config.
 #
 # If this breaks, check:
 #   - "login failed"        -> demo users come from sample_data.sql; passwords
@@ -420,6 +429,95 @@ grep -q "not valid" "$TMP/vbad.html" \
   || c_fail "an unknown token was not reported as invalid"
 
 # =====================================================================
+hdr "3c. PART 4: email send is safe under concurrency and always friendly"
+# A fresh UNVERIFIED account: registration sent the first link, so its send
+# window is cleared first. Then two resends fired at the very same moment must
+# NOT both pass - the limit is checked and recorded in one locked transaction.
+FUSER="smokeflood$(date +%s)"
+FMOB="9$(printf '%09d' $(( (RANDOM * 32768 + RANDOM) % 1000000000 )))"
+J_FL="$TMP/flood.jar"
+curl -s -c "$J_FL" "$BASE/register" -o "$TMP/regf.html"
+FTOK="$(csrf "$TMP/regf.html")"
+c="$(curl -s -b "$J_FL" -c "$J_FL" -o /dev/null -w '%{http_code}' \
+  --data-urlencode "username=$FUSER" --data-urlencode "password=$RPASS" \
+  --data-urlencode "confirm=$RPASS" --data-urlencode "email=${FUSER}@example.com" \
+  --data-urlencode "mobile=$FMOB" \
+  --data-urlencode "district=Pune" --data-urlencode "taluka=Haveli" \
+  --data-urlencode "village=Wagholi" --data-urlencode "area=2" \
+  --data-urlencode "unit=acre" --data-urlencode "soil=black" \
+  --data-urlencode "irrigation=drip" --data-urlencode "description=Concurrency test" \
+  --data-urlencode "lang=en" --data-urlencode "crops=rice" \
+  --data-urlencode "_csrf=$FTOK" "$BASE/register")"
+FH="$(handle_for "$FUSER")"
+FUID="$(q "SELECT id FROM users WHERE username='$FUSER'")"
+if [ "$c" = "302" ] && [ -n "$FH" ]; then c_pass "fresh unverified account $FUSER created for the concurrency test"; \
+  else c_fail "could not create $FUSER (code=$c handle='$FH')"; fi
+
+# read a CSRF token off the verify page (this GET sends nothing at all)
+email_demo_link "$J_FL" "$FH" >/dev/null
+FCSRF="$(csrf "$TMP/verify.html")"
+
+# Registration already sent the FIRST link, so the window is open. Clear it so a
+# new send is allowed, otherwise BOTH parallel resends would be refused and the
+# test would pass for the wrong reason (nothing to serialise).
+q "UPDATE email_verification SET last_sent_at = DATE_SUB(NOW(), INTERVAL 2 MINUTE), \
+   window_start = NULL, sends_in_window = 0 WHERE user_id='$FUID'" >/dev/null
+
+# fire two identical resends at the SAME time (only read the jar, no -c, so the
+# two processes cannot corrupt each other's cookie jar)
+curl -s -L -b "$J_FL" -o "$TMP/fl1.html" \
+  --data-urlencode "h=$FH" --data-urlencode "_csrf=$FCSRF" "$BASE/verify/email/resend" &
+FP1=$!
+curl -s -L -b "$J_FL" -o "$TMP/fl2.html" \
+  --data-urlencode "h=$FH" --data-urlencode "_csrf=$FCSRF" "$BASE/verify/email/resend" &
+FP2=$!
+wait "$FP1" "$FP2"
+
+FOK=0
+for f in "$TMP/fl1.html" "$TMP/fl2.html"; do
+  grep -q "has been sent" "$f" && FOK=$((FOK + 1))
+done
+FROWS="$(q "SELECT COUNT(*) FROM email_verification WHERE user_id='$FUID'")"
+if [ "$FOK" -eq 1 ] && [ "$FROWS" = "1" ]; then
+  c_pass "two simultaneous resends: exactly one is accepted (rate limit holds)"
+else
+  c_fail "two simultaneous resends: accepted=$FOK (expected 1), rows=$FROWS"
+fi
+
+# the DEMO link must be absolute and use THIS run's host:port - i.e. it is built
+# from the request, not hard-coded. Checked with a fresh SEQUENTIAL resend (the
+# two racing requests above may both refuse, and a flash attribute is
+# single-use), so clear the window first and ask once.
+q "UPDATE email_verification SET last_sent_at = DATE_SUB(NOW(), INTERVAL 2 MINUTE), \
+   window_start = NULL, sends_in_window = 0 WHERE user_id='$FUID'" >/dev/null
+curl -s -L -b "$J_FL" -o "$TMP/fl3.html" \
+  --data-urlencode "h=$FH" --data-urlencode "_csrf=$FCSRF" "$BASE/verify/email/resend"
+FLINK="$(grep -oE 'href="https?://[^"]*/verify/email/confirm\?token=[0-9a-f]+' "$TMP/fl3.html" \
+          | head -1 | sed -E 's/^href="//')"
+case "$FLINK" in
+  "$BASE"/verify/email/confirm?token=*) c_pass "the demo link is absolute and uses the request host:port ($BASE)" ;;
+  "") c_fail "the accepted resend showed no demo link" ;;
+  *)  c_fail "the demo link host is wrong: $FLINK" ;;
+esac
+
+# static guards: no class-level lock, a real row lock, and SMTP timeouts set.
+SRC="$(dirname "$0")/src/main/java/com/precisionfarming/advisory_service"
+grep -qE '(public|private|protected)[[:space:]]+synchronized' "$SRC/service/EmailVerificationService.java" \
+  && c_fail "PART 4: EmailVerificationService still uses a class-level lock" \
+  || c_pass "PART 4: EmailVerificationService no longer uses synchronized"
+grep -q 'FOR UPDATE' "$SRC/repository/VerificationDao.java" \
+  && c_pass "PART 4: the rate limit is checked under a row lock (SELECT ... FOR UPDATE)" \
+  || c_fail "PART 4: VerificationDao has no SELECT ... FOR UPDATE"
+APROPS="$(dirname "$0")/src/main/resources/application.properties"
+if grep -q 'mail.smtp.connectiontimeout' "$APROPS" \
+   && grep -q 'mail.smtp.timeout' "$APROPS" \
+   && grep -q 'mail.smtp.writetimeout' "$APROPS"; then
+  c_pass "PART 4: SMTP connect/read/write timeouts are configured"
+else
+  c_fail "PART 4: SMTP timeouts are missing from application.properties"
+fi
+
+# =====================================================================
 hdr "4. Lab registration creates a PENDING lab"
 LUSER="smokelab$(date +%s)"
 curl -s -c "$TMP/labreg.jar" "$BASE/register/lab" -o "$TMP/labreg.html"
@@ -660,10 +758,10 @@ fl="$(q "SELECT COUNT(*) FROM follows WHERE follower_id='$PID_ME' AND following_
 c="$(curl -s -o /dev/null -w '%{http_code}' -b "$J_F2" --data-urlencode "_csrf=$V2TOK" "$BASE/community/post/$PID/delete")"
 [ "$c" = "403" ] && c_pass "farmer2 -> delete someone's post 403" || c_fail "non-owner delete -> $c (expected 403)"
 
-# --- a direct message arrives in the other farmer's inbox ---
-curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode "content=Hello farmer2" --data-urlencode "_csrf=$VTOK" "$BASE/community/messages/$F2ID"
+# --- a direct message arrives in the other farmer's inbox (PART 3: /messages) ---
+curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode "content=Hello farmer2" --data-urlencode "_csrf=$VTOK" "$BASE/messages/$F2ID"
 dm="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME' AND receiver_id='$F2ID'")"
-c="$(fetch "$J_F2" "$BASE/community/messages/$PID_ME" "$TMP/thread.html")"
+c="$(fetch "$J_F2" "$BASE/messages/$PID_ME" "$TMP/thread.html")"
 if [ "$dm" = "1" ] && [ "$c" = "200" ] && grep -q "Hello farmer2" "$TMP/thread.html"; then
   c_pass "direct message stored and shown in the thread"
 else
@@ -1154,6 +1252,146 @@ if [ -n "$DMID" ]; then
   [ "$c" = "403" ] && c_pass "PART 2b: the receiver -> delete my message 403" \
                    || c_fail "PART 2b: receiver delete my message -> $c (expected 403)"
 fi
+
+# =====================================================================
+hdr "13d. PART 3: connections and chat (inbox, unread badge, limits)"
+
+F1ID="$(q "SELECT id FROM users WHERE username='farmer1'")"
+F2NAME="$(q "SELECT COALESCE(fp.full_name, u.username) FROM users u LEFT JOIN farmer_profiles fp ON fp.user_id=u.id WHERE u.id='$F2ID'")"
+
+# --- the Find farmers directory: every other farmer, no missing keys --------
+c="$(fetch "$J_NEW" "$BASE/farmers" "$TMP/farmers.html")"
+n="$(missing_keys "$TMP/farmers.html")"
+if [ "$c" = "200" ] && [ "$n" = "0" ] && grep -q "$F2NAME" "$TMP/farmers.html"; then
+  c_pass "PART 3: /farmers -> 200, lists other farmers, no missing keys"
+else
+  c_fail "PART 3: /farmers -> $c, $n missing keys"
+fi
+# the name search narrows the directory (an impossible name matches nobody)
+fetch "$J_NEW" "$BASE/farmers?q=zzzznotafarmer" "$TMP/farmers_q.html" >/dev/null
+grep -q "No farmers match" "$TMP/farmers_q.html" \
+  && c_pass "PART 3: the /farmers name search filters the list" \
+  || c_fail "PART 3: the name search did not filter"
+# the district filter round-trips (a real district still lists its farmers)
+fetch "$J_NEW" "$BASE/farmers?district=Pune" "$TMP/farmers_d.html" >/dev/null
+grep -q "$F2NAME" "$TMP/farmers_d.html" \
+  && c_pass "PART 3: the /farmers district filter round-trips" \
+  || c_fail "PART 3: the district filter lost farmer2"
+
+# --- farmer2 writes to me: the message is stored and UNREAD for me ----------
+curl -s -b "$J_F2" -c "$J_F2" -o "$TMP/f2thread.html" "$BASE/messages/$PID_ME"
+F2TOK="$(csrf "$TMP/f2thread.html")"
+c="$(curl -s -b "$J_F2" -c "$J_F2" -o /dev/null -w '%{http_code}' \
+  --data-urlencode "content=Reply from farmer2 $RUSER" --data-urlencode "_csrf=$F2TOK" "$BASE/messages/$PID_ME")"
+unread="$(q "SELECT COUNT(*) FROM direct_messages WHERE receiver_id='$PID_ME' AND is_read=0")"
+if [ "$c" = "302" ] && [ "${unread:-0}" -ge 1 ]; then
+  c_pass "PART 3: farmer2's message is stored and UNREAD for me ($unread)"
+else
+  c_fail "PART 3: farmer2 reply -> $c, unread=$unread"
+fi
+
+# --- my inbox lists the conversation, and the top bar shows the badge -------
+c="$(fetch "$J_NEW" "$BASE/messages" "$TMP/inbox3.html")"
+n="$(missing_keys "$TMP/inbox3.html")"
+if [ "$c" = "200" ] && [ "$n" = "0" ] && grep -q "$F2NAME" "$TMP/inbox3.html"; then
+  c_pass "PART 3: /messages inbox lists the conversation, no missing keys"
+else
+  c_fail "PART 3: /messages -> $c, $n missing keys"
+fi
+fetch "$J_NEW" "$BASE/" "$TMP/home_badge.html" >/dev/null
+grep -q 'nav-badge' "$TMP/home_badge.html" \
+  && c_pass "PART 3: the top bar shows an unread badge while messages are unread" \
+  || c_fail "PART 3: no unread badge in the top bar"
+
+# --- opening the thread marks it read, and the badge disappears -------------
+c="$(fetch "$J_NEW" "$BASE/messages/$F2ID" "$TMP/th3.html")"
+n="$(missing_keys "$TMP/th3.html")"
+unread="$(q "SELECT COUNT(*) FROM direct_messages WHERE receiver_id='$PID_ME' AND is_read=0")"
+MTOK="$(csrf "$TMP/th3.html")"
+[ "$c" = "200" ] && [ "$n" = "0" ] && [ "${unread:-0}" = "0" ] \
+  && c_pass "PART 3: opening the thread -> 200 and its messages are marked read" \
+  || c_fail "PART 3: thread -> $c, $n missing keys, unread=$unread"
+fetch "$J_NEW" "$BASE/" "$TMP/home_nobadge.html" >/dev/null
+grep -q 'nav-badge' "$TMP/home_nobadge.html" \
+  && c_fail "PART 3: the badge is still shown when nothing is unread" \
+  || c_pass "PART 3: the unread badge is gone once the thread is read"
+
+# --- who may chat: only a farmer you follow, or who follows you -------------
+c="$(curl -s -o "$TMP/blocked.html" -w '%{http_code}' -b "$J_NEW" "$BASE/messages/$F1ID")"
+[ "$c" = "403" ] && grep -qi 'cannot message' "$TMP/blocked.html" \
+  && c_pass "PART 3: a non-connected farmer's thread -> 403 (blocked page)" \
+  || c_fail "PART 3: non-connected thread -> $c (expected 403)"
+# a thread with yourself: GET redirects to the inbox, POST is refused
+c="$(curl -s -o /dev/null -w '%{http_code}' -b "$J_NEW" "$BASE/messages/$PID_ME")"
+[ "$c" = "302" ] && c_pass "PART 3: opening my own thread redirects (no self-chat)" \
+  || c_fail "PART 3: self thread GET -> $c (expected 302)"
+c="$(curl -s -o /dev/null -w '%{http_code}' -b "$J_NEW" --data-urlencode "content=hi me" --data-urlencode "_csrf=$MTOK" "$BASE/messages/$PID_ME")"
+[ "$c" = "403" ] && c_pass "PART 3: sending to myself -> 403" \
+  || c_fail "PART 3: self POST -> $c (expected 403)"
+c="$(curl -s -o /dev/null -w '%{http_code}' -b "$J_NEW" --data-urlencode "content=hi stranger" --data-urlencode "_csrf=$MTOK" "$BASE/messages/$F1ID")"
+[ "$c" = "403" ] && c_pass "PART 3: sending to a non-connected farmer -> 403" \
+  || c_fail "PART 3: non-connected POST -> $c (expected 403)"
+
+# --- the text rules: empty and over-long are refused, nothing is stored -----
+before="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+c="$(curl -s -b "$J_NEW" -c "$J_NEW" -o "$TMP/msg_empty.html" -w '%{http_code}' \
+  --data-urlencode "content=   " --data-urlencode "_csrf=$MTOK" "$BASE/messages/$F2ID")"
+after="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+if [ "$c" = "200" ] && [ "$before" = "$after" ] && grep -qi "write a message" "$TMP/msg_empty.html"; then
+  c_pass "PART 3: an empty message is refused (nothing stored)"
+else
+  c_fail "PART 3: empty message -> $c, rows $before->$after"
+fi
+printf -v LONGMSG '%*s' 1001 ''
+LONGMSG="${LONGMSG// /x}"
+before="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+c="$(curl -s -b "$J_NEW" -c "$J_NEW" -o "$TMP/msg_long.html" -w '%{http_code}' \
+  --data-urlencode "content=$LONGMSG" --data-urlencode "_csrf=$MTOK" "$BASE/messages/$F2ID")"
+after="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+if [ "$c" = "200" ] && [ "$before" = "$after" ] && grep -qi "too long" "$TMP/msg_long.html"; then
+  c_pass "PART 3: a message over 1000 characters is refused (nothing stored)"
+else
+  c_fail "PART 3: long message -> $c, rows $before->$after"
+fi
+
+# --- the rate limit: at most 20 messages per minute -------------------------
+sent="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME' AND created_at >= (NOW() - INTERVAL 1 MINUTE)")"
+i=0
+while [ "${sent:-0}" -lt 20 ] && [ "$i" -lt 25 ]; do
+  curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null \
+    --data-urlencode "content=rate limit fill $i" --data-urlencode "_csrf=$MTOK" "$BASE/messages/$F2ID"
+  sent="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME' AND created_at >= (NOW() - INTERVAL 1 MINUTE)")"
+  i=$((i + 1))
+done
+[ "${sent:-0}" -ge 20 ] \
+  && c_pass "PART 3: reached the 20-messages-per-minute ceiling" \
+  || c_fail "PART 3: could not reach the rate limit (sent=$sent)"
+before="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+c="$(curl -s -b "$J_NEW" -c "$J_NEW" -o "$TMP/msg_rate.html" -w '%{http_code}' \
+  --data-urlencode "content=one message too many" --data-urlencode "_csrf=$MTOK" "$BASE/messages/$F2ID")"
+after="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME'")"
+if [ "$c" = "200" ] && [ "$before" = "$after" ] && grep -qi "too quickly" "$TMP/msg_rate.html"; then
+  c_pass "PART 3: the 21st message in a minute is refused (rate limited)"
+else
+  c_fail "PART 3: rate limit -> $c, rows $before->$after"
+fi
+
+# --- connections are MUTUAL follows, and chat permission is symmetric -------
+curl -s -b "$J_F2" -c "$J_F2" -o /dev/null \
+  --data-urlencode "back=/farmers" --data-urlencode "_csrf=$F2TOK" "$BASE/community/follow/$PID_ME"
+conn="$(q "SELECT COUNT(*) FROM follows a JOIN follows b ON a.follower_id=b.following_id AND a.following_id=b.follower_id WHERE a.follower_id='$PID_ME' AND a.following_id='$F2ID'")"
+[ "$conn" = "1" ] && c_pass "PART 3: a mutual follow is a connection (1 row)" \
+                  || c_fail "PART 3: mutual follow -> connection rows=$conn"
+fetch "$J_NEW" "$BASE/profile" "$TMP/profile3.html" >/dev/null
+if grep -q "Connections" "$TMP/profile3.html" && grep -q "$F2NAME" "$TMP/profile3.html"; then
+  c_pass "PART 3: /profile shows the Connections tile with the connected farmer"
+else
+  c_fail "PART 3: /profile is missing the Connections tile"
+fi
+# chat permission is symmetric: farmer2, who now follows me, may open my thread
+c="$(fetch "$J_F2" "$BASE/messages/$PID_ME" "$TMP/f2_mine.html")"
+[ "$c" = "200" ] && c_pass "PART 3: chat permission is symmetric (a follower may open my thread)" \
+                  || c_fail "PART 3: farmer2 -> my thread $c (expected 200)"
 
 # =====================================================================
 # PART F: CLEAN UP THE DATA THIS RUN CREATED

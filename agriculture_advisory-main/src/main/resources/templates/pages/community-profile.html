@@ -90,7 +90,7 @@
                     <input type="hidden" name="back" th:value="${'/community/profile/' + member.userId}">
                     <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
                 </form>
-                <a class="btn btn--primary" th:href="@{/community/messages/{id}(id=${member.userId})}"
+                <a class="btn btn--primary" th:href="@{/messages/{id}(id=${member.userId})}"
                    th:text="#{community.profile.message}">Send a message</a>
             </div>
 

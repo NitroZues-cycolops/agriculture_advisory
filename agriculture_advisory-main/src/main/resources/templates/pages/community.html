@@ -42,10 +42,12 @@
             </div>
 
             <p>
-                <a class="btn btn--ghost" th:href="@{/community/messages}"
+                <a class="btn btn--ghost" th:href="@{/messages}"
                    th:text="#{community.inbox}">Inbox</a>
-                <span class="tag tag--warn" th:if="${unread > 0}"
-                      th:text="#{community.inbox.unread(${unread})}">3 unread</span>
+                <span class="tag tag--warn" th:if="${unreadCount > 0}"
+                      th:text="#{messages.inbox.unread(${unreadCount})}">3 unread</span>
+                <a class="btn btn--ghost" th:href="@{/farmers}"
+                   th:text="#{farmers.link}">Find farmers</a>
             </p>
 
             <!-- New post: text + an optional photo (JPG/PNG, up to 2 MB). -->
@@ -172,7 +174,7 @@
                             <button type="submit" class="btn btn--ghost"
                                     th:text="#{community.unfollow}">Unfollow</button>
                         </form>
-                        <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${m.userId})}"
+                        <a class="btn btn--ghost" th:href="@{/messages/{id}(id=${m.userId})}"
                            th:text="#{community.message}">Message</a>
                     </div>
                 </div>
