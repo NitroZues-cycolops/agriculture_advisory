@@ -45,14 +45,16 @@
             </div>
             <div class="alert alert--success" th:if="${param.verified}">
                 <span aria-hidden="true">✅</span>
-                <span th:text="#{auth.login.verified}">Your phone number is already verified. Please log in.</span>
+                <span th:text="#{auth.login.verified}">Your email is verified. Please log in.</span>
+            </div>
+            <div class="alert alert--success" th:if="${param.recoverSent}" th:text="#{verify.recover.generic}">
+                If the account needs verification, a link has been sent to its email address.
             </div>
 
-            <!-- PART B: the account exists but the phone is not verified yet, so
-                 Spring Security disabled it. Explain why and offer the resend. -->
+            <!-- The account exists but its email is not verified yet. -->
             <div class="alert alert--severe" th:if="${param.disabled}">
                 <span aria-hidden="true">⚠️</span>
-                <span th:text="#{auth.login.disabled}">Your account is not verified yet. Please verify your phone number.</span>
+                <span th:text="#{auth.login.disabled}">Your account is not verified yet. Please verify your email address.</span>
             </div>
 
             <!-- th:action keeps the Spring Security CSRF token in the form -->
@@ -71,13 +73,13 @@
 
             <!-- Only a blocked (unverified) visitor needs this second form. -->
             <form th:action="@{/verify/recover}" method="post" th:if="${param.disabled}">
-                <p class="form-hint" th:text="#{verify.recover.help}">Enter your username and we will send a new code to the mobile number on the account.</p>
+                <p class="form-hint" th:text="#{verify.recover.help}">Enter your username to resend the verification email.</p>
                 <div class="form-row">
                     <label for="recover-username" th:text="#{verify.recover.username}">Username</label>
                     <input type="text" id="recover-username" name="username" required>
                 </div>
                 <button type="submit" class="btn btn--primary btn--block"
-                        th:text="#{verify.recover.button}">Send a new code</button>
+                        th:text="#{verify.recover.button}">Send verification email</button>
             </form>
 
             <p class="auth-alt">

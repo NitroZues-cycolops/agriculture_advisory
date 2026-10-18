@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <!--
   =====================================================================
-  PURPOSE : Email verification (PART B, step 2) - OPTIONAL. It never blocks
-            login, so this page always offers a "skip" button. When SMTP is
+    PURPOSE : Required account email verification. When SMTP is
             configured a real email is sent; otherwise the link is shown in a
             clearly labelled DEMO MODE box.
   ROUTE   : GET  /verify/email?h=...         -> VerifyController.emailPage
             POST /verify/email/resend        -> VerifyController.resendEmail
-            POST /verify/skip                -> VerifyController.skipEmail
   ROLE    : public
   LAYOUT  : layout-home -> header tile + .tile--form tile.
   DATA    : h             -> one-time handle for the account
@@ -40,10 +38,10 @@
             <div class="page-head">
                 <h1 class="page-head__title" th:text="#{verify.email.title}">Verify your email</h1>
                 <p class="page-head__sub" th:text="#{verify.email.intro}">
-                    Email verification is optional. You can log in without it.
+                    Verify this email before logging in.
                 </p>
             </div>
-            <p class="form-hint" th:text="#{verify.blocked}">Login stays blocked until your phone is verified.</p>
+            <p class="form-hint" th:text="#{verify.blocked}">Login stays blocked until your email is verified.</p>
         </div>
     </div>
     <!-- TILE END: verify-email-header -->
@@ -62,7 +60,7 @@
 
             <ul class="info-list">
                 <li>
-                    <span th:text="#{verify.phone.account}">Account</span>
+                    <span th:text="#{auth.username}">Account</span>
                     <strong th:text="${username}">farmer1</strong>
                 </li>
                 <li>
@@ -85,15 +83,10 @@
 
             <form th:action="@{/verify/email/resend}" method="post">
                 <input type="hidden" name="h" th:value="${h}">
-                <button type="submit" class="btn btn--primary btn--block"
+                <button th:unless="${emailVerified}" type="submit" class="btn btn--primary btn--block"
                         th:text="#{verify.email.send}">Send the verification link</button>
             </form>
-
-            <form th:action="@{/verify/skip}" method="post">
-                <input type="hidden" name="h" th:value="${h}">
-                <button type="submit" class="btn btn--block"
-                        th:text="#{verify.email.skip}">Skip for now and log in</button>
-            </form>
+            <p class="form-hint" th:text="#{verify.email.limit.hint}">For security, links can be sent once per minute, up to five per hour.</p>
 
         </div>
     </div>

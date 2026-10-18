@@ -12,8 +12,7 @@
 #      and fails if any page answers 404/500 or shows a ??missing.key??.
 #   3. Registers a farmer end to end and checks the saved profile.
 #   4. Checks duplicate username / email / mobile and bad mobile show errors.
-#  4b. PART B: the phone-OTP rules (wrong code, expired code, 5-try lockout,
-#      once-a-minute resend, 5-per-hour cap) against the real endpoints.
+#  4b. Email verification: one-use token, expiry and resend quotas.
 #   5. Registers a lab (with email + phone) and checks it is PENDING.
 #   6. Checks the schemes list/detail in all three languages.
 #   7. Checks the weather cache/forecast tables and the /nowcast,/forecast pages.
@@ -88,33 +87,20 @@ missing_keys() { # file  -> number of ?? occurrences
   grep -c '??' "$1" 2>/dev/null || true
 }
 
-# --- PART B helpers: phone verification -------------------------------------
+# --- Email verification helpers ---------------------------------------------
 
 # the one-time /verify?h=... handle created for a fresh account
 handle_for() { # username -> handle
   q "SELECT handle FROM verification_session WHERE user_id=(SELECT id FROM users WHERE username='$1') ORDER BY id DESC LIMIT 1"
 }
 
-# open the verify page: sets OTP_TOK (the CSRF field) and OTP_CODE (demo code)
-verify_page() { # jar handle
-  curl -s -b "$1" -c "$1" -o "$TMP/verify.html" "$BASE/verify?h=$2"
-  OTP_TOK="$(csrf "$TMP/verify.html")"
-  OTP_CODE="$(grep -oE '<strong>[0-9]{6}</strong>' "$TMP/verify.html" \
-              | grep -oE '[0-9]{6}' | head -1)"
+email_token_from() { # rendered email verification page
+  grep -oE 'token=[A-Fa-f0-9]+' "$1" | head -1 | cut -d= -f2
 }
 
-# submit a code; echoes the HTTP status, body lands in $TMP/otp.html
-otp_post() { # jar handle code
-  curl -s -b "$1" -c "$1" -o "$TMP/otp.html" -w '%{http_code}' \
-    --data-urlencode "h=$2" --data-urlencode "code=$3" \
-    --data-urlencode "_csrf=$OTP_TOK" "$BASE/verify/phone"
-}
-
-# full happy path: read the demo code off the page, submit it, expect a 302
-verify_phone_ok() { # jar handle
-  verify_page "$1" "$2"
-  [ -n "$OTP_CODE" ] && [ -n "$OTP_TOK" ] || return 1
-  [ "$(otp_post "$1" "$2" "$OTP_CODE")" = "302" ]
+confirm_email() { # token
+  curl -s -o "$TMP/email-confirm.html" -w '%{http_code}' \
+       "$BASE/verify/email/confirm?token=$1"
 }
 
 # =====================================================================
@@ -134,7 +120,7 @@ hdr "2. Top-bar pages, all roles, all 3 languages (status + no ??keys??)"
 # role:jar:pages, and pages that must be 403 for that role
 check_pages() { # name jar expected403_text
   local name="$1" jar="$2" forbid="$3"
-  local pages="/ /nowcast /forecast /lab /schemes /community /profile /map"
+  local pages="/ /nowcast /forecast /lab /schemes /community /profile /map /farmers /messages"
   local p lang url body c n
   for p in $pages; do
     for lang in en hi mr; do
@@ -152,23 +138,29 @@ check_pages() { # name jar expected403_text
       if [ "$n" != "0" ]; then
         c_fail "$name $p [$lang] -> $n missing key(s) (??key??)"
       fi
+      if ! grep -q "<html[^>]*lang=\"$lang\"" "$body"; then
+        c_fail "$name $p [$lang] -> document lang is not $lang"
+      fi
+      if ! grep -q 'class="skip-link"' "$body"; then
+        c_fail "$name $p [$lang] -> skip link is missing"
+      fi
     done
   done
-  c_pass "$name: 8 pages x 3 languages checked (no 404/500, no ??key??)"
+  c_pass "$name: 10 pages x 3 languages checked (no 404/500/??key??; lang + skip link)"
 }
 check_pages farmer1 "$J_FARM" ""
 check_pages lab1    "$J_LAB"  ""
 check_pages owner   "$J_OWN"  ""
 
 # =====================================================================
-hdr "3. Farmer registration end to end (email + phone verification)"
+hdr "3. Farmer registration end to end (email verification)"
 RUSER="smoke$(date +%s)"
 RPASS="password123"
 J_NEW="$TMP/regfarmer.jar"
 curl -s -c "$TMP/reg.jar" "$BASE/register" -o "$TMP/reg.html"
 RTOK="$(csrf "$TMP/reg.html")"
 reg_post() { # out-file username mobile email
-  curl -s -b "$TMP/reg.jar" -c "$TMP/reg.jar" -o "$1" -w '%{http_code}' \
+  curl -s -L -b "$TMP/reg.jar" -c "$TMP/reg.jar" -o "$1" -w '%{http_code}' \
     --data-urlencode "username=$2" --data-urlencode "password=$RPASS" \
     --data-urlencode "confirm=$RPASS" --data-urlencode "email=$4" \
     --data-urlencode "mobile=$3" \
@@ -180,31 +172,37 @@ reg_post() { # out-file username mobile email
     --data-urlencode "_csrf=$RTOK" "$BASE/register"
 }
 c="$(reg_post "$TMP/reg_out.html" "$RUSER" "9876501234" "$RUSER@example.com")"
-if [ "$c" = "302" ]; then c_pass "POST /register -> 302 (created $RUSER)"; else c_fail "POST /register -> $c"; fi
+if [ "$c" = "200" ]; then c_pass "POST /register -> verification page 200 (created $RUSER)"; else c_fail "POST /register -> $c"; fi
 
-# PART B: the account is UNVERIFIED, so login must still be refused
+# The account is UNVERIFIED, so login must still be refused.
 if login "$RUSER" "$RPASS" "$J_NEW"; then
-  c_fail "$RUSER could log in BEFORE verifying the phone"
+  c_fail "$RUSER could log in BEFORE verifying the email"
 else
-  c_pass "$RUSER cannot log in before the phone is verified"
+  c_pass "$RUSER cannot log in before the email is verified"
 fi
 # ... and the login page explains why
 c="$(curl -s -o "$TMP/login_disabled.html" -w '%{http_code}' "$BASE/login?disabled")"
-grep -q "not verified yet" "$TMP/login_disabled.html" \
-  && c_pass "/login?disabled explains the unverified account" \
+grep -q "verify your email address" "$TMP/login_disabled.html" \
+  && c_pass "/login?disabled explains that email verification is required" \
   || c_fail "/login?disabled does not explain the unverified account"
 
-# PART B: complete the phone step with the demo code shown on the page
+# Complete the email step with the demo verification link.
 RH="$(handle_for "$RUSER")"
-if verify_phone_ok "$TMP/reg.jar" "$RH"; then
-  c_pass "phone verified with the demo OTP (handle $RH)"
+RTOKEN="$(email_token_from "$TMP/reg_out.html")"
+if [ -n "$RTOKEN" ] && [ "$(confirm_email "$RTOKEN")" = "200" ]; then
+  c_pass "email verified with the one-time demo token (handle $RH)"
 else
-  c_fail "phone verification failed (handle '$RH')"
+  c_fail "email verification failed (handle '$RH')"
 fi
 if login "$RUSER" "$RPASS" "$J_NEW"; then
-  c_pass "$RUSER can log in after the phone is verified"
+  c_pass "$RUSER can log in after the email is verified"
 else
-  c_fail "$RUSER still cannot log in after verification"
+  c_fail "$RUSER still cannot log in after email verification"
+fi
+if [ "$(confirm_email "$RTOKEN")" = "200" ] && grep -q "not valid" "$TMP/email-confirm.html"; then
+  c_pass "a used email token cannot be reused"
+else
+  c_fail "a used email token was not invalidated"
 fi
 
 fetch "$J_NEW" "$BASE/profile" "$TMP/prof.html" >/dev/null
@@ -247,89 +245,56 @@ else
 fi
 
 # =====================================================================
-hdr "3b. PART B: OTP rules (wrong, expired, lockout, resend limits)"
-# a fresh, unverified account to exercise the failure paths on
-BUSER="smokeotp$(date +%s)"
-BMOB="9$(printf '%09d' $(( (RANDOM * 32768 + RANDOM) % 1000000000 )))"
-J_OTP="$TMP/otpuser.jar"
-curl -s -c "$J_OTP" "$BASE/register" -o "$TMP/regb.html"
+hdr "3b. Email token expiry and resend limits"
+BUSER="smokeexpire$(date +%s)"
+BMOB="9876509876"
+J_EMAIL="$TMP/emailuser.jar"
+curl -s -c "$J_EMAIL" "$BASE/register" -o "$TMP/regb.html"
 RTOKB="$(csrf "$TMP/regb.html")"
-c="$(curl -s -b "$J_OTP" -c "$J_OTP" -o /dev/null -w '%{http_code}' \
+c="$(curl -s -L -b "$J_EMAIL" -c "$J_EMAIL" -o "$TMP/regb-out.html" -w '%{http_code}' \
   --data-urlencode "username=$BUSER" --data-urlencode "password=$RPASS" \
   --data-urlencode "confirm=$RPASS" --data-urlencode "email=${BUSER}@example.com" \
-  --data-urlencode "mobile=$BMOB" \
-  --data-urlencode "district=Pune" --data-urlencode "taluka=Haveli" \
-  --data-urlencode "village=Wagholi" --data-urlencode "area=2" \
-  --data-urlencode "unit=acre" --data-urlencode "soil=black" \
-  --data-urlencode "irrigation=drip" --data-urlencode "description=OTP rules test" \
+  --data-urlencode "mobile=$BMOB" --data-urlencode "district=Pune" \
+  --data-urlencode "taluka=Haveli" --data-urlencode "village=Wagholi" \
+  --data-urlencode "area=2" --data-urlencode "unit=acre" --data-urlencode "soil=black" \
+  --data-urlencode "irrigation=drip" --data-urlencode "description=email rules test" \
   --data-urlencode "lang=en" --data-urlencode "crops=rice" \
   --data-urlencode "_csrf=$RTOKB" "$BASE/register")"
-BH="$(handle_for "$BUSER")"
-if [ "$c" = "302" ] && [ -n "$BH" ]; then c_pass "fresh account $BUSER created for the OTP rules"; \
-  else c_fail "could not create $BUSER for the OTP rules (code=$c handle='$BH')"; fi
-BUID="$(q "SELECT id FROM users WHERE username='$BUSER'")"
-
-# the verify page shows the code in a clearly labelled DEMO MODE box
-verify_page "$J_OTP" "$BH"
-BCODE="$OTP_CODE"
-if [ -n "$BCODE" ] && grep -q "DEMO MODE: no SMS is sent" "$TMP/verify.html"; then
-  c_pass "verify page shows the demo code inside the DEMO MODE box"
+BH="$(handle_for "$BUSER")"; BUID="$(q "SELECT id FROM users WHERE username='$BUSER'")"
+BTOKEN="$(email_token_from "$TMP/regb-out.html")"
+cp "$TMP/regb-out.html" "$TMP/email.html"
+grep -q 'DEMO MODE: no email is sent' "$TMP/email.html" && [ -n "$BTOKEN" ] \
+  && c_pass "demo email link is shown and carries a verification token" \
+  || c_fail "demo email verification link was not shown"
+EMAIL_CSRF="$(csrf "$TMP/email.html")"
+curl -s -L -b "$J_EMAIL" -c "$J_EMAIL" -o "$TMP/resend-soon.html" \
+  --data-urlencode "h=$BH" --data-urlencode "_csrf=$EMAIL_CSRF" "$BASE/verify/email/resend"
+grep -q 'wait one minute' "$TMP/resend-soon.html" \
+  && c_pass "email resend inside one minute is refused" \
+  || c_fail "email resend interval was not enforced"
+q "UPDATE email_verification SET last_sent_at=DATE_SUB(NOW(), INTERVAL 2 MINUTE), \
+   resend_window_start=NOW(), sends_in_window=5 WHERE user_id='$BUID'" >/dev/null
+curl -s -b "$J_EMAIL" "$BASE/verify/email?h=$BH" -o "$TMP/email.html"
+EMAIL_CSRF="$(csrf "$TMP/email.html")"
+curl -s -L -b "$J_EMAIL" -c "$J_EMAIL" -o "$TMP/resend-limit.html" \
+  --data-urlencode "h=$BH" --data-urlencode "_csrf=$EMAIL_CSRF" "$BASE/verify/email/resend"
+grep -q 'five verification links per hour' "$TMP/resend-limit.html" \
+  && c_pass "5-per-hour email resend cap is enforced" \
+  || c_fail "email hourly resend cap was not enforced"
+q "UPDATE email_verification SET expires_at=DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE user_id='$BUID'" >/dev/null
+if [ -n "$BTOKEN" ] && [ "$(confirm_email "$BTOKEN")" = "200" ] \
+   && grep -q 'link has expired' "$TMP/email-confirm.html"; then
+  c_pass "expired email verification token is rejected"
 else
-  c_fail "verify page has no DEMO MODE box / demo code"
+  c_fail "expired email token was not rejected"
 fi
-
-# a wrong code is refused with the attempts-left message
-WRONG="000000"; [ "$BCODE" = "000000" ] && WRONG="111111"
-c="$(otp_post "$J_OTP" "$BH" "$WRONG")"
-if grep -q "attempts left" "$TMP/otp.html"; then
-  c_pass "a wrong code is refused and shows the attempts left"
-else
-  c_fail "wrong code (http $c) did not show the attempts-left message"
-fi
-
-# a resend inside one minute is refused (at most one per minute)
-curl -s -L -b "$J_OTP" -c "$J_OTP" -o "$TMP/resend.html" \
-  --data-urlencode "h=$BH" --data-urlencode "_csrf=$OTP_TOK" "$BASE/verify/resend"
-grep -q "wait a minute" "$TMP/resend.html" \
-  && c_pass "a resend inside one minute is refused (once-per-minute rule)" \
-  || c_fail "resend-too-soon message missing"
-
-# the 5-codes-per-hour cap (simulated: 5 sends already in this window)
-q "UPDATE phone_verification SET last_sent_at = DATE_SUB(NOW(), INTERVAL 2 MINUTE), \
-   window_start = NOW(), sends_in_window = 5 WHERE user_id='$BUID'" >/dev/null
-curl -s -L -b "$J_OTP" -c "$J_OTP" -o "$TMP/resend2.html" \
-  --data-urlencode "h=$BH" --data-urlencode "_csrf=$OTP_TOK" "$BASE/verify/resend"
-grep -q "too many codes this hour" "$TMP/resend2.html" \
-  && c_pass "the 5-codes-per-hour cap is enforced" \
-  || c_fail "hourly resend cap not enforced"
-
-# an EXPIRED code is refused (simulated by moving expires_at into the past)
-q "UPDATE phone_verification SET expires_at = DATE_SUB(NOW(), INTERVAL 1 MINUTE) \
-   WHERE user_id='$BUID'" >/dev/null
-verify_page "$J_OTP" "$BH"
-c="$(otp_post "$J_OTP" "$BH" "$BCODE")"
-grep -q "has expired" "$TMP/otp.html" \
-  && c_pass "an expired code is refused (checked against the DB expiry)" \
-  || c_fail "expired code (http $c) not reported as expired"
-
-# 5 wrong codes -> lockout, stored in the database
-q "UPDATE phone_verification SET attempts = 0, locked_until = NULL, \
-   expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE user_id='$BUID'" >/dev/null
-verify_page "$J_OTP" "$BH"
-for _i in 1 2 3 4 5; do c="$(otp_post "$J_OTP" "$BH" "$WRONG")"; done
-grep -q "Too many wrong codes" "$TMP/otp.html" \
-  && c_pass "5 wrong codes show the lockout message" \
-  || c_fail "lockout message missing after 5 wrong codes"
-lk="$(q "SELECT locked_until IS NOT NULL FROM phone_verification WHERE user_id='$BUID'")"
-[ "$lk" = "1" ] && c_pass "the lockout is stored in phone_verification" \
-                || c_fail "no locked_until row after 5 wrong codes"
 
 # =====================================================================
 hdr "4. Lab registration creates a PENDING lab"
 LUSER="smokelab$(date +%s)"
 curl -s -c "$TMP/labreg.jar" "$BASE/register/lab" -o "$TMP/labreg.html"
 LTOK="$(csrf "$TMP/labreg.html")"
-c="$(curl -s -b "$TMP/labreg.jar" -c "$TMP/labreg.jar" -o /dev/null -w '%{http_code}' \
+c="$(curl -s -L -b "$TMP/labreg.jar" -c "$TMP/labreg.jar" -o "$TMP/labreg-out.html" -w '%{http_code}' \
   --data-urlencode "username=$LUSER" --data-urlencode "name=Smoke Test Lab" \
   --data-urlencode "email=${LUSER}@example.com" \
   --data-urlencode "password=$RPASS" --data-urlencode "confirm=$RPASS" \
@@ -338,21 +303,22 @@ c="$(curl -s -b "$TMP/labreg.jar" -c "$TMP/labreg.jar" -o /dev/null -w '%{http_c
   --data-urlencode "timings=9 AM - 6 PM" --data-urlencode "samples=soil" \
   --data-urlencode "lat=18.52" --data-urlencode "lon=73.86" \
   --data-urlencode "_csrf=$LTOK" "$BASE/register/lab")"
-if [ "$c" = "302" ]; then c_pass "POST /register/lab -> 302"; else c_fail "POST /register/lab -> $c"; fi
+if [ "$c" = "200" ]; then c_pass "POST /register/lab -> verification page 200"; else c_fail "POST /register/lab -> $c"; fi
 st="$(q "SELECT l.status FROM labs l JOIN users u ON u.id=l.user_id WHERE u.username='$LUSER'")"
 [ "$st" = "PENDING" ] && c_pass "new lab row is PENDING in the database" || c_fail "new lab status is '$st' (expected PENDING)"
-# A PENDING (and not yet phone-verified) lab must NOT be able to log in.
+# A PENDING lab must NOT be able to log in, even after email verification.
 if login "$LUSER" "$RPASS" "$TMP/labpending.jar"; then
   c_fail "PENDING lab $LUSER was able to log in (should be disabled)"
 else
   c_pass "PENDING lab $LUSER cannot log in before approval"
 fi
-# PART B: a lab can complete its phone step while PENDING; approval is separate.
+# Verify its email while it is PENDING; approval remains a separate gate.
 LH="$(handle_for "$LUSER")"
-if verify_phone_ok "$TMP/labreg.jar" "$LH"; then
-  c_pass "lab phone verified with the demo OTP (handle $LH)"
+LTOKEN="$(email_token_from "$TMP/labreg-out.html")"
+if [ -n "$LTOKEN" ] && [ "$(confirm_email "$LTOKEN")" = "200" ]; then
+  c_pass "lab email verified while PENDING (handle $LH)"
 else
-  c_fail "lab phone verification failed (handle '$LH')"
+  c_fail "lab email verification failed (handle '$LH')"
 fi
 
 # =====================================================================
@@ -575,6 +541,127 @@ else
   c_fail "direct message missing (rows=$dm, code=$c)"
 fi
 
+# --- Part G: deny unconnected GET and POST, then allow either follow direction ---
+J_F3="$TMP/farmer3.jar"
+login farmer3 password123 "$J_F3" && c_pass "farmer3 logged in for connection checks" || c_fail "farmer3 login failed"
+F3ID="$(q "SELECT id FROM users WHERE username='farmer3'")"
+deny_get="$(curl -s -o "$TMP/chat-denied.html" -w '%{http_code}' -b "$J_NEW" "$BASE/messages/$F3ID")"
+curl -s -b "$J_NEW" "$BASE/community" -o "$TMP/community.html"
+CHAT_CSRF="$(csrf "$TMP/community.html")"
+deny_post="$(curl -s -o "$TMP/chat-denied-post.html" -w '%{http_code}' -b "$J_NEW" \
+  --data-urlencode 'content=must not be stored' --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/messages/$F3ID")"
+denied_rows="$(q "SELECT COUNT(*) FROM direct_messages WHERE sender_id='$PID_ME' AND receiver_id='$F3ID'")"
+if [ "$deny_get" = "403" ] && [ "$deny_post" = "403" ] && [ "$denied_rows" = "0" ]; then
+  c_pass "unconnected chat GET and POST are both 403 with no message row"
+else
+  c_fail "unconnected chat guard failed (GET=$deny_get POST=$deny_post rows=$denied_rows)"
+fi
+
+# Follower direction: farmer3 follows this newly registered farmer.
+curl -s -b "$J_F3" "$BASE/community" -o "$TMP/f3-community.html"
+F3_CSRF="$(csrf "$TMP/f3-community.html")"
+curl -s -b "$J_F3" -c "$J_F3" -o /dev/null --data-urlencode 'back=/community' \
+  --data-urlencode "_csrf=$F3_CSRF" "$BASE/community/follow/$PID_ME"
+followers="$(q "SELECT COUNT(*) FROM follows WHERE follower_id='$F3ID' AND following_id='$PID_ME'")"
+connect_count="$(q "SELECT COUNT(*) FROM follows a JOIN follows b ON b.follower_id=a.following_id AND b.following_id=a.follower_id WHERE a.follower_id='$PID_ME' AND a.following_id='$F3ID'")"
+if [ "$followers" = "1" ] && [ "$connect_count" = "0" ]; then c_pass "follower count increments without claiming a mutual connection"; else c_fail "follower/connection counts wrong ($followers/$connect_count)"; fi
+allowed_in="$(curl -s -o "$TMP/inbound-thread.html" -w '%{http_code}' -b "$J_NEW" "$BASE/messages/$F3ID")"
+[ "$allowed_in" = "200" ] && c_pass "chat allowed with a farmer who follows you" || c_fail "inbound-follow chat -> $allowed_in"
+
+# Make the relationship mutual and verify the connections card/list.
+curl -s -b "$J_NEW" "$BASE/community" -o "$TMP/community.html"
+CHAT_CSRF="$(csrf "$TMP/community.html")"
+curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode 'back=/community' \
+  --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/community/follow/$F3ID"
+connect_count="$(q "SELECT COUNT(*) FROM follows a JOIN follows b ON b.follower_id=a.following_id AND b.following_id=a.follower_id WHERE a.follower_id='$PID_ME' AND a.following_id='$F3ID'")"
+curl -s -b "$J_NEW" "$BASE/profile" -o "$TMP/profile-connections.html"
+curl -s -b "$J_F3" "$BASE/profile" -o "$TMP/f3-profile.html"
+if [ "$connect_count" = "1" ] && grep -q 'Connections (1)' "$TMP/profile-connections.html" \
+   && grep -q 'Connections (1)' "$TMP/f3-profile.html"; then
+  c_pass "mutual connection appears in both farmers' profile lists"
+else
+  c_fail "mutual connection missing from one or both profile lists"
+fi
+
+# Unfollow removes the direction and the mutual connection; refollow for later chat checks.
+curl -s -b "$J_NEW" "$BASE/profile" -o "$TMP/profile-follow.html"
+CHAT_CSRF="$(csrf "$TMP/profile-follow.html")"
+curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode 'back=/profile' \
+  --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/community/unfollow/$F3ID"
+connect_count="$(q "SELECT COUNT(*) FROM follows a JOIN follows b ON b.follower_id=a.following_id AND b.following_id=a.follower_id WHERE a.follower_id='$PID_ME' AND a.following_id='$F3ID'")"
+[ "$connect_count" = "0" ] && c_pass "unfollow removes the mutual connection" || c_fail "unfollow left a connection row"
+curl -s -b "$J_NEW" "$BASE/community" -o "$TMP/community.html"; CHAT_CSRF="$(csrf "$TMP/community.html")"
+curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode 'back=/community' \
+  --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/community/follow/$F3ID"
+
+# Send the reverse-direction message, check unread badge and clear-on-open.
+curl -s -b "$J_F3" "$BASE/messages/$PID_ME" -o "$TMP/f3-thread.html"
+CHAT_CSRF="$(csrf "$TMP/f3-thread.html")"
+curl -s -b "$J_F3" -c "$J_F3" -o /dev/null --data-urlencode "content=Inbound from farmer3 $RUSER" \
+  --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/messages/$PID_ME"
+unread="$(q "SELECT COUNT(*) FROM direct_messages WHERE receiver_id='$PID_ME' AND sender_id='$F3ID' AND is_read=0")"
+fetch "$J_NEW" "$BASE/" "$TMP/unread-home.html" >/dev/null
+curl -s -b "$J_NEW" -o "$TMP/unread-thread.html" "$BASE/messages/$F3ID"
+cleared="$(q "SELECT COUNT(*) FROM direct_messages WHERE receiver_id='$PID_ME' AND sender_id='$F3ID' AND is_read=0")"
+if [ "$unread" -gt 0 ] && grep -q 'nav-unread' "$TMP/unread-home.html" && [ "$cleared" = "0" ]; then
+  c_pass "unread badge appears and opening the thread marks inbound messages read"
+else
+  c_fail "unread badge/read clearing mismatch ($unread unread before, $cleared after)"
+fi
+
+# Overlong text is rejected server-side and echoed back in the field.
+curl -s -b "$J_NEW" "$BASE/messages/$F3ID" -o "$TMP/long-thread.html"
+CHAT_CSRF="$(csrf "$TMP/long-thread.html")"
+LONG_MSG="$(head -c 1001 /dev/zero | tr '\0' X)"
+long_code="$(curl -s -b "$J_NEW" -c "$J_NEW" -o "$TMP/long-error.html" -w '%{http_code}' \
+  --data-urlencode "content=$LONG_MSG" --data-urlencode "_csrf=$CHAT_CSRF" "$BASE/messages/$F3ID")"
+grep -q '1000 characters or fewer' "$TMP/long-error.html" && grep -q "$LONG_MSG" "$TMP/long-error.html" \
+  && [ "$long_code" = "200" ] && c_pass "message over 1000 characters rejected and typed text retained" \
+  || c_fail "long message validation/retention failed (HTTP $long_code)"
+
+# Public directory and another profile never expose a different farmer's contacts.
+fetch "$J_NEW" "$BASE/farmers" "$TMP/farmers-private.html" >/dev/null
+fetch "$J_NEW" "$BASE/profile" "$TMP/profile-private.html" >/dev/null
+if ! grep -q 'farmer2@example.com' "$TMP/farmers-private.html" "$TMP/profile-private.html" \
+   && ! grep -q '9876543211' "$TMP/farmers-private.html" "$TMP/profile-private.html"; then
+  c_pass "/farmers and /profile do not reveal another farmer's phone or email"
+else
+  c_fail "another farmer's contact data appeared on a public/profile page"
+fi
+
+# Avatar endpoint: logged-in initials fallback, valid upload becomes 256x256 JPEG,
+# disguised text and oversized files are rejected, and anonymous access is denied.
+FARMER_ID="$PID_ME"
+anon_avatar="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/avatar/$FARMER_ID")"
+fetch "$J_NEW" "$BASE/profile" "$TMP/profile-photo.html" >/dev/null
+PHOTO_CSRF="$(csrf "$TMP/profile-photo.html")"
+grep -q 'avatar--initials' "$TMP/profile-photo.html" && [ "$anon_avatar" = "302" ] \
+  && c_pass "initials fallback renders and /avatar requires login" \
+  || c_fail "avatar fallback/login check failed (anonymous=$anon_avatar)"
+printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' | base64 -d > "$TMP/avatar-valid.png" 2>/dev/null
+photo_code="$(curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null -w '%{http_code}' -F "photo=@$TMP/avatar-valid.png;type=image/png" -F "_csrf=$PHOTO_CSRF" "$BASE/profile/photo")"
+photo_path="$(q "SELECT photo_path FROM farmer_profiles WHERE user_id='$PID_ME'")"
+avatar_code="$(curl -s -b "$J_NEW" -o "$TMP/avatar-served.jpg" -w '%{http_code} %{content_type}' "$BASE/avatar/$FARMER_ID")"
+[[ "$photo_code" = "302" && "$photo_path" == *.jpg && "$avatar_code" == "200 image/jpeg" ]] \
+  && c_pass "valid PNG is stored as JPEG and served by /avatar" \
+  || c_fail "avatar upload/serve failed (POST=$photo_code path=$photo_path GET=$avatar_code)"
+printf 'not an image' > "$TMP/not-image.png"
+curl -s -b "$J_NEW" "$BASE/profile" -o "$TMP/profile-photo.html"; PHOTO_CSRF="$(csrf "$TMP/profile-photo.html")"
+bad_photo="$(curl -s -L -b "$J_NEW" -c "$J_NEW" -o "$TMP/avatar-bad.html" -w '%{http_code}' \
+  -F "photo=@$TMP/not-image.png;type=image/png" -F "_csrf=$PHOTO_CSRF" "$BASE/profile/photo")"
+grep -q 'Use a JPG or PNG image' "$TMP/avatar-bad.html" \
+  && c_pass "text file renamed .png is rejected" || c_fail "disguised text image was not rejected ($bad_photo)"
+head -c 2097153 /dev/zero > "$TMP/avatar-large.png"
+curl -s -b "$J_NEW" "$BASE/profile" -o "$TMP/profile-photo.html"; PHOTO_CSRF="$(csrf "$TMP/profile-photo.html")"
+large_photo="$(curl -s -L -b "$J_NEW" -c "$J_NEW" -o "$TMP/avatar-large.html" -w '%{http_code}' \
+  -F "photo=@$TMP/avatar-large.png;type=image/png" -F "_csrf=$PHOTO_CSRF" "$BASE/profile/photo")"
+grep -q '2 MB or smaller' "$TMP/avatar-large.html" \
+  && c_pass "profile image larger than 2 MB is rejected" || c_fail "oversized avatar was not rejected ($large_photo)"
+curl -s -b "$J_NEW" "$BASE/profile" -o "$TMP/profile-photo.html"; PHOTO_CSRF="$(csrf "$TMP/profile-photo.html")"
+curl -s -b "$J_NEW" -c "$J_NEW" -o /dev/null --data-urlencode "_csrf=$PHOTO_CSRF" "$BASE/profile/photo/remove"
+photo_path="$(q "SELECT COALESCE(photo_path,'') FROM farmer_profiles WHERE user_id='$PID_ME'")"
+[ -z "$photo_path" ] && c_pass "remove photo clears the stored path" || c_fail "remove photo left path=$photo_path"
+
 # --- photo upload: a real PNG is stored and served through the controller ---
 printf '%s' "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > "$TMP/px.png" 2>/dev/null
 curl -s -b "$J_NEW" -c "$J_NEW" -o "$TMP/comm.html" "$BASE/community"
@@ -632,7 +719,7 @@ reg_lab() { # user -> prints the new lab id
   local u="$1"
   curl -s -c "$TMP/labreg2.jar" "$BASE/register/lab" -o "$TMP/labreg2.html"
   local t; t="$(csrf "$TMP/labreg2.html")"
-  curl -s -b "$TMP/labreg2.jar" -c "$TMP/labreg2.jar" -o /dev/null \
+  curl -s -L -b "$TMP/labreg2.jar" -c "$TMP/labreg2.jar" -o "$TMP/labreg2-out.html" \
     --data-urlencode "username=$u" --data-urlencode "name=Owner Test Lab $u" \
     --data-urlencode "email=${u}@example.com" \
     --data-urlencode "password=$RPASS" --data-urlencode "confirm=$RPASS" \
@@ -641,17 +728,19 @@ reg_lab() { # user -> prints the new lab id
     --data-urlencode "timings=9 AM - 6 PM" --data-urlencode "samples=soil" \
     --data-urlencode "lat=18.52" --data-urlencode "lon=73.86" \
     --data-urlencode "_csrf=$t" "$BASE/register/lab"
+  REG_LAB_TOKEN="$(email_token_from "$TMP/labreg2-out.html")"
   q "SELECT l.id FROM labs l JOIN users u ON u.id=l.user_id WHERE u.username='$u'"
 }
 AUSER="oklab$(date +%s)$RANDOM"; AID="$(reg_lab "$AUSER")"
 AST="$(q "SELECT status FROM labs WHERE id='$AID'")"
 if [ -n "$AID" ] && [ "$AST" = "PENDING" ]; then c_pass "fresh lab $AUSER is PENDING (id $AID)"; else c_fail "fresh lab $AUSER not PENDING (id=$AID status=$AST)"; fi
-# PART B: complete the lab's phone step (approval alone is not enough to log in)
+# Complete the lab's email step; owner approval remains independently required.
 AH="$(handle_for "$AUSER")"
-if verify_phone_ok "$TMP/labreg2.jar" "$AH"; then
-  c_pass "verified the phone of the fresh lab $AUSER"
+ATOKEN="$(email_token_from "$TMP/labreg2-out.html")"
+if [ -n "$ATOKEN" ] && [ "$(confirm_email "$ATOKEN")" = "200" ]; then
+  c_pass "verified the email of the fresh lab $AUSER"
 else
-  c_fail "could not verify the phone of $AUSER (handle '$AH')"
+  c_fail "could not verify the email of $AUSER (handle '$AH')"
 fi
 
 # approve it: the status flips and the account can finally log in
@@ -789,6 +878,14 @@ esac
 # =====================================================================
 hdr "14. Clean up the smoke-test rows"
 
+UPLOAD_ROOT="$PWD/uploads/"
+while IFS= read -r photo; do
+  [[ -n "$photo" && "$photo" == "$UPLOAD_ROOT"* ]] && rm -f -- "$photo"
+done < <(q "SELECT fp.photo_path FROM farmer_profiles fp JOIN users u ON u.id=fp.user_id WHERE u.username LIKE 'smoke%' OR u.username LIKE 'oklab%' OR u.username LIKE 'rejlab%' OR u.username LIKE 'dupemail%' OR u.username LIKE 'dupmo%' OR u.username LIKE 'badmobile%'")
+while IFS= read -r image; do
+  [[ -n "$image" && "$image" == "$UPLOAD_ROOT"* ]] && rm -f -- "$image"
+done < <(q "SELECT p.image_path FROM community_posts p JOIN users u ON u.id=p.user_id WHERE u.username LIKE 'smoke%' OR u.username LIKE 'oklab%' OR u.username LIKE 'rejlab%' OR u.username LIKE 'dupemail%' OR u.username LIKE 'dupmo%' OR u.username LIKE 'badmobile%'")
+
 CLEAN_SQL="
 DROP TABLE IF EXISTS _smoke_users;
 CREATE TABLE _smoke_users (id BIGINT PRIMARY KEY);
@@ -807,7 +904,6 @@ DELETE FROM direct_messages   WHERE sender_id IN (SELECT id FROM _smoke_users) O
 DELETE FROM community_posts   WHERE user_id IN (SELECT id FROM _smoke_users);
 DELETE FROM farmer_profiles   WHERE user_id IN (SELECT id FROM _smoke_users);
 DELETE FROM verification_session WHERE user_id IN (SELECT id FROM _smoke_users);
-DELETE FROM phone_verification   WHERE user_id IN (SELECT id FROM _smoke_users);
 DELETE FROM email_verification   WHERE user_id IN (SELECT id FROM _smoke_users);
 DELETE FROM labs              WHERE user_id IN (SELECT id FROM _smoke_users);
 DELETE FROM alerts            WHERE user_id IN (SELECT id FROM _smoke_users);

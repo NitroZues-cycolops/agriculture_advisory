@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.ModelAndView;
 
 import java.io.File;
 import java.io.IOException;
@@ -259,9 +260,11 @@ public class CommunityController {
         Member member = community.findMember(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
+        model.addAttribute("me", me);
         model.addAttribute("member", member);
         model.addAttribute("posts", community.postsBy(id, me));
         model.addAttribute("following", community.isFollowing(me, id));
+        model.addAttribute("canMessage", community.canMessage(me, id));
         model.addAttribute("self", me.equals(id));
         model.addAttribute("followerCount", community.followerCount(id));
         model.addAttribute("followingCount", community.followingCount(id));
@@ -273,45 +276,84 @@ public class CommunityController {
 
     /* ============================ MESSAGES ============================ */
 
-    @GetMapping("/community/messages")
+    @GetMapping({"/community/messages", "/messages"})
     public String inbox(Authentication auth, Model model) {
         Long me = currentUserId(auth);
         model.addAttribute("conversations", community.inbox(me));
         model.addAttribute("members", community.listMembers());
+        Set<Long> chatAllowed = new HashSet<>(community.followingIds(me));
+        for (Member follower : community.followerMembers(me)) {
+            chatAllowed.add(follower.userId());
+        }
+        model.addAttribute("chatAllowedIds", chatAllowed);
+        model.addAttribute("following", new HashSet<>(community.followingIds(me)));
+        model.addAttribute("me", me);
         model.addAttribute("role", role(auth));
         model.addAttribute("unread", community.unreadCount(me));
         return "pages/community-inbox";
     }
 
-    @GetMapping("/community/messages/{id}")
-    public String thread(@PathVariable Long id, Authentication auth, Model model) {
+    @GetMapping({"/community/messages/{id}", "/messages/{id}"})
+    public ModelAndView thread(@PathVariable Long id, Authentication auth) {
         Long me = currentUserId(auth);
         if (me.equals(id)) {
-            return "redirect:/community/messages";
+            return new ModelAndView("redirect:/messages");
         }
         Member other = community.findMember(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
+        ModelAndView view = new ModelAndView("pages/community-thread");
+        view.setStatus(community.canMessage(me, id) ? HttpStatus.OK : HttpStatus.FORBIDDEN);
+        view.addObject("canMessage", community.canMessage(me, id));
+        view.addObject("following", community.isFollowing(me, id));
+        view.addObject("other", other);
+        view.addObject("me", me);
+        view.addObject("role", role(auth));
+        if (!community.canMessage(me, id)) {
+            view.addObject("thread", List.of());
+            view.addObject("messageErrors", Map.of());
+            view.addObject("messageValue", "");
+            view.addObject("unread", community.unreadCount(me));
+            return view;
+        }
         community.markRead(me, id);   // opening the thread clears its unread badge
-        model.addAttribute("other", other);
-        model.addAttribute("thread", community.thread(me, id));
-        model.addAttribute("me", me);
-        model.addAttribute("role", role(auth));
-        model.addAttribute("unread", community.unreadCount(me));
-        return "pages/community-thread";
+        view.addObject("thread", community.thread(me, id));
+        view.addObject("messageErrors", Map.of());
+        view.addObject("messageValue", "");
+        view.addObject("unread", community.unreadCount(me));
+        return view;
     }
 
-    @PostMapping("/community/messages/{id}")
-    public String send(@PathVariable Long id, Authentication auth,
-                       @RequestParam(name = "content", required = false) String content) {
+    @PostMapping({"/community/messages/{id}", "/messages/{id}"})
+    public ModelAndView send(@PathVariable Long id, Authentication auth,
+                             @RequestParam(name = "content", required = false) String content) {
         Long me = currentUserId(auth);
-        String text = content == null ? "" : content.trim();
-        if (!me.equals(id) && !text.isEmpty() && text.length() <= MAX_CONTENT
-                && community.findMember(id).isPresent()) {
-            community.insertMessage(me, id, text);
-            log.info("[COMMUNITY] message from {} to {}", me, id);
+        if (!me.equals(id) && !community.canMessage(me, id)) {
+            ModelAndView denied = thread(id, auth);
+            denied.setStatus(HttpStatus.FORBIDDEN);
+            return denied;
         }
-        return "redirect:/community/messages/" + id;
+        String text = content == null ? "" : content.trim();
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (text.isEmpty()) {
+            errors.put("content", msg("community.thread.error.empty"));
+        } else if (text.length() > MAX_CONTENT) {
+            errors.put("content", msg("community.thread.error.long"));
+        } else if (!community.insertMessageWithinLimit(me, id, text)) {
+            errors.put("content", msg("community.thread.error.rate"));
+        }
+        if (!errors.isEmpty()) {
+            ModelAndView view = thread(id, auth);
+            view.setStatus(HttpStatus.OK);
+            view.addObject("messageErrors", errors);
+            view.addObject("messageValue", content);
+            return view;
+        }
+        if (community.findMember(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        log.info("[COMMUNITY] message sent from {} to {}", me, id);
+        return new ModelAndView("redirect:/messages/" + id);
     }
 
     /* ============================== IMAGE ============================== */
@@ -347,8 +389,13 @@ public class CommunityController {
     private void addDirectory(Model model, Long me) {
         List<Member> members = community.listMembers();
         Set<Long> following = new HashSet<>(community.followingIds(me));
+        Set<Long> chatAllowed = new HashSet<>(following);
+        for (Member follower : community.followerMembers(me)) {
+            chatAllowed.add(follower.userId());
+        }
         model.addAttribute("members", members);
         model.addAttribute("following", following);
+        model.addAttribute("chatAllowedIds", chatAllowed);
         model.addAttribute("me", me);
     }
 

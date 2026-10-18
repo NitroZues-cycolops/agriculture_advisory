@@ -6,7 +6,7 @@ import com.precisionfarming.advisory_service.model.User;
 import com.precisionfarming.advisory_service.repository.DistrictDao;
 import com.precisionfarming.advisory_service.repository.LabDao;
 import com.precisionfarming.advisory_service.repository.UserRepository;
-import com.precisionfarming.advisory_service.service.OtpService;
+import com.precisionfarming.advisory_service.service.EmailVerificationService;
 import com.precisionfarming.advisory_service.service.VerificationSessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +17,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,18 +41,18 @@ public class LabRegisterController {
     private final DistrictDao districts;
     private final PasswordEncoder encoder;
     private final MessageSource messages;
-    private final OtpService otpService;
+    private final EmailVerificationService emailService;
     private final VerificationSessionService sessions;
 
     public LabRegisterController(UserRepository users, LabDao labs, DistrictDao districts,
                                  PasswordEncoder encoder, MessageSource messages,
-                                 OtpService otpService, VerificationSessionService sessions) {
+                                 EmailVerificationService emailService, VerificationSessionService sessions) {
         this.users = users;
         this.labs = labs;
         this.districts = districts;
         this.encoder = encoder;
         this.messages = messages;
-        this.otpService = otpService;
+        this.emailService = emailService;
         this.sessions = sessions;
     }
 
@@ -82,7 +83,7 @@ public class LabRegisterController {
     @PostMapping("/register/lab")
     public String submit(@RequestParam Map<String, String> params,
                          @RequestParam(name = "samples", required = false) List<String> samples,
-                         Model model, Locale locale) {
+                         Model model, Locale locale, RedirectAttributes flash) {
 
         Map<String, String> form = new LinkedHashMap<>(params);
         String sampleList = samples == null ? "" : String.join(",", samples);
@@ -108,11 +109,9 @@ public class LabRegisterController {
         user.setUsername(username);
         user.setPassword(encoder.encode(params.get("password")));
         user.setRole("LAB");
-        // PART B: same identity rules as a farmer - the account starts unverified
-        // and cannot log in until the phone is verified (and the owner approves).
+        // The lab also must verify its email and receive owner approval before login.
         user.setEmail(email);
         user.setPhone(phone);
-        user.setPhoneVerified(false);
         user.setEmailVerified(false);
         users.save(user);
 
@@ -130,13 +129,15 @@ public class LabRegisterController {
         lab.setLon(parseDouble(params.get("lon")));
         labs.insert(lab);
 
-        // Same phone-verification flow as the farmer registration.
-        otpService.issue(user.getId(), phone);
         String handle = sessions.create(user.getId());
+        EmailVerificationService.Dispatch dispatch = emailService.send(user.getId(), email);
+        if (dispatch.demo() && dispatch.token() != null) {
+            flash.addFlashAttribute("demoLink", emailService.verificationLink(dispatch.token()));
+        }
 
-        log.info("[REG] Lab '{}' registered (district={}, status=PENDING), phone verification sent",
+        log.info("[REG] Lab '{}' registered (district={}, status=PENDING), email verification dispatched",
                 lab.getName(), lab.getDistrict());
-        return "redirect:/verify?h=" + handle;
+        return "redirect:/verify/email?h=" + handle + "&sent=1";
     }
 
     /** Server-side rules shared shape with RegisterController. */

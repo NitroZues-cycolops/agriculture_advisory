@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+<th:block th:fragment="content">
+    <div class="tile tile--span">
+        <div class="tile__header"><span class="tile__title" th:text="#{farmers.title}">Find farmers</span></div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{farmers.title}">Find farmers</h1>
+                <p class="page-head__sub" th:text="#{farmers.intro}">Search farmer profiles by name or district.</p>
+            </div>
+            <form th:action="@{/farmers}" method="get" class="form-grid farmers-filter">
+                <div class="form-row">
+                    <label for="farmer-name" th:text="#{farmers.name}">Name</label>
+                    <input id="farmer-name" name="name" type="search" maxlength="80" th:value="${nameSearch}">
+                </div>
+                <div class="form-row">
+                    <label for="farmer-district" th:text="#{field.district}">District</label>
+                    <select id="farmer-district" name="district">
+                        <option value="" th:text="#{farmers.any_district}">Any district</option>
+                        <option th:each="district : ${districts}" th:value="${district.nameEn}"
+                                th:selected="${selectedDistrict == district.nameEn}"
+                                th:text="${district.nameFor(#locale.language)}">Pune</option>
+                    </select>
+                </div>
+                <div class="farmers-filter__submit">
+                    <button class="btn btn--primary" type="submit" th:text="#{farmers.search}">Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="tile tile--span">
+        <div class="tile__header"><span class="tile__title" th:text="#{farmers.results}">Farmers</span></div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${#lists.isEmpty(members)}" th:text="#{farmers.empty}">No farmers match.</p>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(members)}">
+                <th:block th:each="member : ${members}">
+                    <div th:replace="~{fragments/farmer-card :: card(${member}, ${me}, ${following}, '/farmers', false)}"></div>
+                </th:block>
+            </div>
+            <p style="margin-top:12px"><a class="card__btn" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a></p>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

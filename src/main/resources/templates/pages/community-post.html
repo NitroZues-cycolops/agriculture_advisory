@@ -31,6 +31,8 @@
 
             <div class="post" style="margin-top:12px;">
                 <div class="post__meta">
+                    <img class="avatar avatar--small" th:src="@{/avatar/{id}(id=${post.userId})}"
+                         th:alt="#{community.avatar.alt(${post.authorName})}">
                     <a th:href="@{/community/profile/{id}(id=${post.userId})}"
                        th:text="${post.authorName}">Farmer</a>
                     <span th:if="${post.authorDistrict != null}" th:text="${post.authorDistrict}">Pune</span>
@@ -95,6 +97,8 @@
 
             <div class="post" th:each="c : ${comments}">
                 <div class="post__meta">
+                    <img class="avatar avatar--small" th:src="@{/avatar/{id}(id=${c.userId})}"
+                         th:alt="#{community.avatar.alt(${c.authorName})}">
                     <a th:href="@{/community/profile/{id}(id=${c.userId})}"
                        th:text="${c.authorName}">Farmer</a>
                     <span th:text="${#temporals.format(c.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>

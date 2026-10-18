@@ -51,6 +51,72 @@
     </div>
     <!-- TILE END: profile-header -->
 
+    <div class="tile tile--span" id="tile-profile-photo">
+        <div class="tile__header"><span class="tile__title" th:text="#{profile.photo.title}">Profile picture</span></div>
+        <div class="tile__body profile-photo">
+              <img class="avatar avatar--large" th:if="${profilePhoto != null and !profilePhoto.isBlank()}"
+                  th:src="@{/avatar/{id}(id=${viewerId})}"
+                  th:alt="#{community.avatar.alt(${profile.fullName})}">
+              <span class="avatar avatar--large avatar--initials" th:unless="${profilePhoto != null and !profilePhoto.isBlank()}"
+                   th:style="'background-color:' + ${profileAvatarColor}"
+                   th:aria-label="#{community.avatar.alt(${profile.fullName})}"
+                   th:text="${profileInitials}">AB</span>
+            <div class="profile-photo__actions">
+                <p class="form-hint" th:if="${profilePhoto == null or profilePhoto.isBlank()}"
+                   th:text="#{profile.photo.prompt}">Add a photo to help other farmers recognize you.</p>
+                <p class="alert alert--success" th:if="${photoSuccess != null}" th:text="${photoSuccess}">Photo updated.</p>
+                <p class="alert alert--warning" th:if="${photoError != null}" th:text="${photoError}">Photo error.</p>
+                <form th:action="@{/profile/photo}" method="post" enctype="multipart/form-data">
+                    <div class="form-row">
+                        <label for="profile-photo-input" th:text="#{profile.photo.label}">Add photo</label>
+                        <input id="profile-photo-input" name="photo" type="file" accept="image/jpeg,image/png" required>
+                        <span class="form-hint" th:text="#{profile.photo.hint}">JPG or PNG, up to 2 MB.</span>
+                    </div>
+                    <button class="btn btn--primary" type="submit" th:text="#{profile.photo.upload}">Upload photo</button>
+                </form>
+                <form th:if="${profilePhoto != null and !profilePhoto.isBlank()}"
+                      th:action="@{/profile/photo/remove}" method="post">
+                    <button class="btn btn--ghost" type="submit" th:text="#{profile.photo.remove}">Remove photo</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="tile tile--span" id="tile-profile-following">
+        <div class="tile__header"><span class="tile__title" th:text="#{profile.following(${followingMembers.size()})}">Following</span></div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${#lists.isEmpty(followingMembers)}" th:text="#{profile.relationships.empty.following}">You are not following anyone yet.</p>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(followingMembers)}">
+                <th:block th:each="member : ${followingMembers}">
+                    <div th:replace="~{fragments/farmer-card :: card(${member}, ${viewerId}, ${followingIds}, '/profile', true)}"></div>
+                </th:block>
+            </div>
+        </div>
+    </div>
+    <div class="tile tile--span" id="tile-profile-followers">
+        <div class="tile__header"><span class="tile__title" th:text="#{profile.followers(${followerMembers.size()})}">Followers</span></div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${#lists.isEmpty(followerMembers)}" th:text="#{profile.relationships.empty.followers}">No one follows you yet.</p>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(followerMembers)}">
+                <th:block th:each="member : ${followerMembers}">
+                    <div th:replace="~{fragments/farmer-card :: card(${member}, ${viewerId}, ${followingIds}, '/profile', true)}"></div>
+                </th:block>
+            </div>
+        </div>
+    </div>
+    <div class="tile tile--span" id="tile-profile-connections">
+        <div class="tile__header"><span class="tile__title" th:text="#{profile.connections(${connectionMembers.size()})}">Connections</span></div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${#lists.isEmpty(connectionMembers)}" th:text="#{profile.relationships.empty.connections}">No mutual connections yet.</p>
+            <div class="lab-grid" th:unless="${#lists.isEmpty(connectionMembers)}">
+                <th:block th:each="member : ${connectionMembers}">
+                    <div th:replace="~{fragments/farmer-card :: card(${member}, ${viewerId}, ${followingIds}, '/profile', true)}"></div>
+                </th:block>
+            </div>
+            <p style="margin-top:12px"><a class="btn btn--ghost" th:href="@{/farmers}" th:text="#{farmers.title}">Find farmers</a></p>
+        </div>
+    </div>
+
     <!-- TILE START: profile-account | controller: ProfileController -->
     <div class="tile tile--form" id="tile-profile-account" tabindex="0">
         <div class="tile__header">
@@ -83,6 +149,15 @@
                 </li>
             </ul>
             <p class="form-hint" th:text="#{profile.email.hint}">Email verification is optional.</p>
+            <p class="alert alert--success" th:if="${emailNotice != null}" th:text="${emailNotice}">Verification email status.</p>
+            <div class="demo-box" th:if="${demoLink != null}">
+                <p class="demo-box__title" th:text="#{verify.email.demo.title}">DEMO MODE: no email is sent.</p>
+                <p th:text="#{verify.email.demo.body}">Open this link to verify your email.</p>
+                <a th:href="${demoLink}" th:text="#{verify.email.open}">Verify now</a>
+            </div>
+            <form th:if="${!emailVerified}" th:action="@{/profile/email/resend}" method="post">
+                <button class="btn btn--ghost" type="submit" th:text="#{profile.email.send}">Send verification email</button>
+            </form>
 
             <div class="form-row" style="margin-top:14px;">
                 <label for="pf-name" th:text="#{field.fullname}">Full name</label>

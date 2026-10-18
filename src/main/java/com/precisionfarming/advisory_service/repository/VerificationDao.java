@@ -1,7 +1,6 @@
 package com.precisionfarming.advisory_service.repository;
 
 import com.precisionfarming.advisory_service.model.EmailVerification;
-import com.precisionfarming.advisory_service.model.PhoneVerification;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -11,7 +10,6 @@ import java.util.Optional;
 
 /**
  * All SQL for the PART B verification tables (schema_new.sql section 10):
- *   phone_verification    - one row per account, the phone OTP state
  *   email_verification    - one row per account, the email token
  *   verification_session  - the random /verify?h=... handle
  *
@@ -31,19 +29,6 @@ public class VerificationDao {
         this.jdbc = jdbc;
     }
 
-    private static final RowMapper<PhoneVerification> PHONE_MAPPER = (rs, i) -> new PhoneVerification(
-            rs.getLong("id"),
-            rs.getLong("user_id"),
-            rs.getString("phone"),
-            rs.getString("otp_hash"),
-            rs.getInt("attempts"),
-            rs.getTimestamp("locked_until") == null ? null : rs.getTimestamp("locked_until").toLocalDateTime(),
-            rs.getTimestamp("expires_at").toLocalDateTime(),
-            rs.getTimestamp("verified_at") == null ? null : rs.getTimestamp("verified_at").toLocalDateTime(),
-            rs.getTimestamp("last_sent_at").toLocalDateTime(),
-            rs.getTimestamp("window_start").toLocalDateTime(),
-            rs.getInt("sends_in_window"));
-
     private static final RowMapper<EmailVerification> EMAIL_MAPPER = (rs, i) -> new EmailVerification(
             rs.getLong("id"),
             rs.getLong("user_id"),
@@ -51,65 +36,9 @@ public class VerificationDao {
             rs.getString("token_hash"),
             rs.getTimestamp("expires_at").toLocalDateTime(),
             rs.getTimestamp("verified_at") == null ? null : rs.getTimestamp("verified_at").toLocalDateTime(),
-            rs.getTimestamp("last_sent_at").toLocalDateTime());
-
-    // ------------------------------------------------------------------
-    // phone_verification
-    // ------------------------------------------------------------------
-
-    public Optional<PhoneVerification> findPhone(Long userId) {
-        return jdbc.query("SELECT * FROM phone_verification WHERE user_id = ?", PHONE_MAPPER, userId)
-                .stream().findFirst();
-    }
-
-    /**
-     * Issues a first code (or replaces the state completely) and starts a new
-     * 1-hour send window with one send in it.
-     * `verified_at` is deliberately NOT touched, so re-issuing a code can never
-     * silently un-verify an account.
-     */
-    public int startPhone(Long userId, String phone, String otpHash,
-                          LocalDateTime now, LocalDateTime expiresAt) {
-        return jdbc.update("""
-                INSERT INTO phone_verification
-                    (user_id, phone, otp_hash, attempts, locked_until, expires_at,
-                     verified_at, last_sent_at, window_start, sends_in_window, created_at)
-                VALUES (?, ?, ?, 0, NULL, ?, NULL, ?, ?, 1, ?)
-                ON DUPLICATE KEY UPDATE
-                    phone = VALUES(phone),
-                    otp_hash = VALUES(otp_hash),
-                    attempts = 0,
-                    locked_until = NULL,
-                    expires_at = VALUES(expires_at),
-                    last_sent_at = VALUES(last_sent_at),
-                    window_start = VALUES(window_start),
-                    sends_in_window = 1
-                """, userId, phone, otpHash, expiresAt, now, now, now);
-    }
-
-    /** Replaces the code of an EXISTING row and bumps the send counter. */
-    public int resendPhone(Long userId, String otpHash, LocalDateTime now,
-                           LocalDateTime expiresAt, LocalDateTime windowStart, int sends) {
-        return jdbc.update("""
-                UPDATE phone_verification
-                   SET otp_hash = ?, attempts = 0, locked_until = NULL,
-                       expires_at = ?, last_sent_at = ?, window_start = ?, sends_in_window = ?
-                 WHERE user_id = ?
-                """, otpHash, expiresAt, now, windowStart, sends, userId);
-    }
-
-    /** Counts one wrong code; locks the account when `lockedUntil` is not null. */
-    public int recordPhoneFailure(Long userId, int attempts, LocalDateTime lockedUntil) {
-        return jdbc.update("""
-                UPDATE phone_verification SET attempts = ?, locked_until = ? WHERE user_id = ?
-                """, attempts, lockedUntil, userId);
-    }
-
-    /** Marks the OTP verified AND flips users.phone_verified in the same call. */
-    public int markPhoneVerified(Long userId, LocalDateTime now) {
-        jdbc.update("UPDATE users SET phone_verified = 1 WHERE id = ?", userId);
-        return jdbc.update("UPDATE phone_verification SET verified_at = ? WHERE user_id = ?", now, userId);
-    }
+            rs.getTimestamp("last_sent_at").toLocalDateTime(),
+            rs.getTimestamp("resend_window_start") == null ? null : rs.getTimestamp("resend_window_start").toLocalDateTime(),
+            rs.getInt("sends_in_window"));
 
     // ------------------------------------------------------------------
     // email_verification
@@ -126,23 +55,31 @@ public class VerificationDao {
     }
 
     public int saveEmailToken(Long userId, String email, String tokenHash,
-                              LocalDateTime now, LocalDateTime expiresAt) {
+                              LocalDateTime now, LocalDateTime expiresAt,
+                              LocalDateTime windowStart, int sends) {
         return jdbc.update("""
                 INSERT INTO email_verification
-                    (user_id, email, token_hash, expires_at, verified_at, last_sent_at, created_at)
-                VALUES (?, ?, ?, ?, NULL, ?, ?)
+                    (user_id, email, token_hash, expires_at, verified_at, last_sent_at,
+                     resend_window_start, sends_in_window, created_at)
+                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     email = VALUES(email),
                     token_hash = VALUES(token_hash),
                     expires_at = VALUES(expires_at),
-                    last_sent_at = VALUES(last_sent_at)
-                """, userId, email, tokenHash, expiresAt, now, now);
+                    last_sent_at = VALUES(last_sent_at),
+                    resend_window_start = VALUES(resend_window_start),
+                    sends_in_window = VALUES(sends_in_window)
+                """, userId, email, tokenHash, expiresAt, now, windowStart, sends, now);
     }
 
     /** Marks the email verified AND flips users.email_verified in the same call. */
     public int markEmailVerified(Long userId, LocalDateTime now) {
         jdbc.update("UPDATE users SET email_verified = 1 WHERE id = ?", userId);
-        return jdbc.update("UPDATE email_verification SET verified_at = ? WHERE user_id = ?", now, userId);
+        return jdbc.update("""
+            UPDATE email_verification
+               SET verified_at = ?, token_hash = SHA2(CONCAT(UUID(), NOW(6)), 256)
+             WHERE user_id = ?
+            """, now, userId);
     }
 
     // ------------------------------------------------------------------
@@ -163,7 +100,7 @@ public class VerificationDao {
                 Long.class, handle).stream().findFirst();
     }
 
-    /** Called once the phone is verified: the handle must not work again. */
+    /** Called once the email is verified: the handle must not work again. */
     public int deleteSessionsForUser(Long userId) {
         return jdbc.update("DELETE FROM verification_session WHERE user_id = ?", userId);
     }

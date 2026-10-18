@@ -15,7 +15,9 @@ public record EmailVerification(
         String tokenHash,
         LocalDateTime expiresAt,
         LocalDateTime verifiedAt,
-        LocalDateTime lastSentAt) {
+        LocalDateTime lastSentAt,
+        LocalDateTime resendWindowStart,
+        int sendsInWindow) {
 
     public boolean isVerified() {
         return verifiedAt != null;

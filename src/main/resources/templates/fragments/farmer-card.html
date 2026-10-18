@@ -1,0 +1,44 @@
+<div xmlns:th="http://www.thymeleaf.org" th:fragment="card(member, me, followingIds, back, showChat)" class="lab-card farmer-card">
+    <div class="farmer-card__heading">
+           <img class="avatar" th:if="${member.photoPath != null and !member.photoPath.isBlank()}"
+               th:src="@{/avatar/{id}(id=${member.userId})}"
+               th:alt="#{community.avatar.alt(${member.displayName()})}">
+           <span class="avatar avatar--initials" th:unless="${member.photoPath != null and !member.photoPath.isBlank()}"
+                th:style="'background-color:' + ${member.avatarColor()}"
+                th:aria-label="#{community.avatar.alt(${member.displayName()})}"
+                th:text="${member.initials()}">AB</span>
+        <div class="lab-card__name">
+            <a th:href="@{/community/profile/{id}(id=${member.userId})}"
+               th:text="${member.displayName()}">Farmer</a>
+        </div>
+    </div>
+    <ul class="info-list farmer-card__details">
+        <li><span class="label" th:text="#{community.profile.district}">District</span>
+            <span th:text="${member.district != null ? member.district : #messages.msg('community.profile.none.value')}">Pune</span></li>
+        <li><span class="label" th:text="#{community.profile.taluka}">Taluka</span>
+            <span th:text="${member.taluka != null ? member.taluka : #messages.msg('community.profile.none.value')}">Haveli</span></li>
+        <li><span class="label" th:text="#{community.profile.crops}">Crops</span>
+            <span th:if="${member.crops != null and !member.crops.isBlank()}">
+                    <span class="tag" th:each="crop : ${#strings.arraySplit(member.crops, ',')}"
+                        th:text="${#messages.msg('crop.' + #strings.toLowerCase(#strings.trim(crop)))}">Rice</span>
+            </span>
+            <span th:unless="${member.crops != null and !member.crops.isBlank()}"
+                  th:text="#{community.profile.none.value}">Not provided</span></li>
+    </ul>
+    <div class="btn-row farmer-card__actions" th:if="${member.userId != me}">
+        <a class="btn btn--ghost" th:href="@{/community/profile/{id}(id=${member.userId})}"
+           th:text="#{community.profile.view}">View profile</a>
+        <form th:if="${!followingIds.contains(member.userId)}"
+              th:action="@{/community/follow/{id}(id=${member.userId})}" method="post">
+            <input type="hidden" name="back" th:value="${back}">
+            <button type="submit" class="btn btn--ghost" th:text="#{community.follow}">Follow</button>
+        </form>
+        <form th:if="${followingIds.contains(member.userId)}"
+              th:action="@{/community/unfollow/{id}(id=${member.userId})}" method="post">
+            <input type="hidden" name="back" th:value="${back}">
+            <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
+        </form>
+        <a class="btn btn--ghost" th:if="${showChat}"
+           th:href="@{/messages/{id}(id=${member.userId})}" th:text="#{community.message}">Chat</a>
+    </div>
+</div>

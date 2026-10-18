@@ -110,7 +110,7 @@
                        th:classappend="${errors['mobile'] != null} ? ' is-invalid'">
                 <span class="form-error" th:if="${errors['mobile'] != null}"
                       th:text="${errors['mobile']}">error</span>
-                <span class="form-hint" th:text="#{register.mobile.hint}">10 digits, starting with 6-9. We send the code by SMS to this number.</span>
+                <span class="form-hint" th:text="#{register.mobile.hint}">10 digits, starting with 6-9. Used as farm contact data only.</span>
             </div>
 
             <div class="form-row">

@@ -28,6 +28,8 @@
         </div>
         <div class="tile__body">
             <div class="page-head">
+                <img class="avatar avatar--large" th:src="@{/avatar/{id}(id=${member.userId})}"
+                     th:alt="#{community.avatar.alt(${member.displayName()})}">
                 <h1 class="page-head__title" th:text="${member.displayName()}">Farmer</h1>
                 <p class="page-head__sub" th:text="${'@' + member.username}">@farmer1</p>
             </div>
@@ -52,7 +54,7 @@
                     <span class="label" th:text="#{community.profile.crops}">Crops</span>
                     <span>
                         <span class="tag" th:each="c : ${#strings.arraySplit(member.crops, ',')}"
-                              th:text="${#messages.msg('crop.' + #strings.trim(c))}">Rice</span>
+                              th:text="${#messages.msg('crop.' + #strings.toLowerCase(#strings.trim(c)))}">Rice</span>
                     </span>
                 </li>
                 <li>
@@ -87,7 +89,8 @@
                     <input type="hidden" name="back" th:value="${'/community/profile/' + member.userId}">
                     <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
                 </form>
-                <a class="btn btn--primary" th:href="@{/community/messages/{id}(id=${member.userId})}"
+                     <a class="btn btn--primary" th:if="${canMessage}"
+                         th:href="@{/messages/{id}(id=${member.userId})}"
                    th:text="#{community.profile.message}">Send a message</a>
             </div>
 
@@ -109,6 +112,8 @@
 
             <div class="post" th:each="p : ${posts}">
                 <div class="post__meta">
+                    <img class="avatar avatar--small" th:src="@{/avatar/{id}(id=${p.userId})}"
+                        th:alt="#{community.avatar.alt(${member.displayName()})}">
                     <span th:text="${#temporals.format(p.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
                 </div>
                 <p class="card__text" th:text="${p.content}">A post.</p>

@@ -19,7 +19,7 @@
 <th:block th:fragment="content">
 
     <!-- TILE START: comminbox-list | controller: CommunityController.inbox -->
-    <div class="tile tile--form" id="tile-comminbox-list" tabindex="0">
+    <div class="tile tile--span" id="tile-comminbox-list">
         <div class="tile__header">
             <span class="tile__title" th:text="'[6] ' + #{community.inbox.title}">[6] Inbox</span>
         </div>
@@ -30,6 +30,8 @@
 
             <div class="post" th:each="c : ${conversations}">
                 <div class="post__meta">
+                    <img class="avatar avatar--small" th:src="@{/avatar/{id}(id=${c.otherId})}"
+                         th:alt="#{community.avatar.alt(${c.otherName})}">
                     <a th:href="@{/community/profile/{id}(id=${c.otherId})}"
                        th:text="${c.otherName}">Farmer</a>
                     <span th:if="${c.lastAt != null}"
@@ -38,7 +40,7 @@
                           th:text="#{community.inbox.unread(${c.unread})}">1 unread</span>
                 </div>
                 <p class="card__text" th:text="${c.lastContent}">last message</p>
-                <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${c.otherId})}"
+                <a class="btn btn--ghost" th:href="@{/messages/{id}(id=${c.otherId})}"
                    th:text="#{community.inbox.open}">Open</a>
             </div>
 
@@ -56,11 +58,20 @@
         </div>
         <div class="tile__body">
             <div class="lab-grid">
-                <div class="lab-card" th:each="m : ${members}">
-                    <div class="lab-card__name" th:text="${m.displayName()}">Farmer</div>
+                <div class="lab-card" th:each="m : ${members}" th:if="${m.userId != me}">
+                    <div class="farmer-card__heading">
+                        <img class="avatar" th:src="@{/avatar/{id}(id=${m.userId})}"
+                             th:alt="#{community.avatar.alt(${m.displayName()})}">
+                        <div class="lab-card__name" th:text="${m.displayName()}">Farmer</div>
+                    </div>
                     <p class="card__text" th:if="${m.district != null}" th:text="${m.district}">Pune</p>
-                    <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${m.userId})}"
-                       th:text="#{community.message}">Message</a>
+                          <a class="btn btn--ghost" th:if="${chatAllowedIds.contains(m.userId)}"
+                       th:href="@{/messages/{id}(id=${m.userId})}" th:text="#{community.message}">Chat</a>
+                    <form th:if="${!following.contains(m.userId)}"
+                          th:action="@{/community/follow/{id}(id=${m.userId})}" method="post">
+                        <input type="hidden" name="back" value="/messages">
+                        <button class="btn btn--ghost" type="submit" th:text="#{community.follow}">Follow</button>
+                    </form>
                 </div>
             </div>
         </div>

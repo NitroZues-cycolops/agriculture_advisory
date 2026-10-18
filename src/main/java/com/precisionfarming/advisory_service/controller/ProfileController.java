@@ -4,11 +4,16 @@ import com.precisionfarming.advisory_service.model.FarmerProfile;
 import com.precisionfarming.advisory_service.model.ReferenceData;
 import com.precisionfarming.advisory_service.model.User;
 import com.precisionfarming.advisory_service.repository.DistrictDao;
+import com.precisionfarming.advisory_service.repository.CommunityDao;
 import com.precisionfarming.advisory_service.repository.FarmerProfileDao;
 import com.precisionfarming.advisory_service.repository.UserRepository;
+import com.precisionfarming.advisory_service.service.EmailVerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,6 +26,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.HashSet;
+import java.util.Set;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
+import javax.imageio.ImageIO;
 
 /**
  * The farmer's own profile (workspace 7) - STEP 2.
@@ -40,14 +58,23 @@ public class ProfileController {
     private final UserRepository users;
     private final FarmerProfileDao profiles;
     private final DistrictDao districts;
+    private final CommunityDao community;
     private final MessageSource messages;
+    private final EmailVerificationService emailService;
+    private final String uploadDir;
+    private static final long MAX_PHOTO_BYTES = 2L * 1024 * 1024;
 
     public ProfileController(UserRepository users, FarmerProfileDao profiles,
-                             DistrictDao districts, MessageSource messages) {
+                             DistrictDao districts, CommunityDao community, MessageSource messages,
+                             EmailVerificationService emailService,
+                             @Value("${pfas.uploads.dir:uploads}") String uploadDir) {
         this.users = users;
         this.profiles = profiles;
         this.districts = districts;
+        this.community = community;
         this.messages = messages;
+        this.emailService = emailService;
+        this.uploadDir = uploadDir;
     }
 
     /**
@@ -71,11 +98,18 @@ public class ProfileController {
 
         addOptions(model);
         addAccount(model, userId);
+        model.addAttribute("viewerId", userId);
         model.addAttribute("profile", existing.orElseGet(() -> blankProfile(userId, auth.getName())));
         model.addAttribute("selectedCrops", existing
                 .map(p -> p.getCrops() == null ? List.<String>of() : List.of(p.getCrops().split(",")))
                 .orElse(List.of()));
         model.addAttribute("hasProfile", existing.isPresent());
+        model.addAttribute("profilePhoto", existing.map(FarmerProfile::getPhotoPath).orElse(null));
+        model.addAttribute("profileInitials", initials(existing.map(FarmerProfile::getFullName).orElse(auth.getName())));
+        model.addAttribute("profileAvatarColor", avatarColor(existing.map(FarmerProfile::getFullName).orElse(auth.getName())));
+        addRelationships(model, userId);
+        model.addAttribute("photoError", model.asMap().get("photoError"));
+        model.addAttribute("photoSuccess", model.asMap().get("photoSuccess"));
         // The template reads errors['field'] for every field. An empty map keeps
         // that lookup valid on a plain GET (a null map made the page fail).
         model.addAttribute("errors", Map.of());
@@ -116,13 +150,17 @@ public class ProfileController {
         p.setIrrigation(blankToNull(params.get("irrigation")));
         p.setDescription(blankToNull(params.get("description")));
         p.setPreferredLang(params.getOrDefault("lang", "en"));
+        profiles.findByUserId(userId).ifPresent(old -> p.setPhotoPath(old.getPhotoPath()));
 
         if (!errors.isEmpty()) {
             log.info("[REG] Profile update rejected for user {}: {}", userId, errors.keySet());
             addOptions(model);
             addAccount(model, userId);
+            model.addAttribute("viewerId", userId);
             model.addAttribute("errors", errors);
             model.addAttribute("profile", p);
+            model.addAttribute("profilePhoto", p.getPhotoPath());
+            addRelationships(model, userId);
             model.addAttribute("selectedCrops", crops == null ? List.of() : crops);
             model.addAttribute("hasProfile", profiles.findByUserId(userId).isPresent());
             return "pages/profile";
@@ -136,6 +174,154 @@ public class ProfileController {
         }
         log.info("[REG] Profile saved for user {} (district={})", userId, p.getDistrict());
         return "redirect:/profile?saved";
+    }
+
+    @PostMapping("/profile/photo")
+    public String uploadPhoto(Authentication auth, @RequestParam("photo") MultipartFile photo,
+                              RedirectAttributes flash, Locale locale) {
+        Long userId = currentUserId(auth);
+        if (!"FARMER".equals(role(auth))) {
+            return "redirect:/profile";
+        }
+        if (photo == null || photo.isEmpty()) {
+            flash.addFlashAttribute("photoError", msg("profile.photo.error.empty", locale));
+            return "redirect:/profile";
+        }
+        if (photo.getSize() > MAX_PHOTO_BYTES) {
+            flash.addFlashAttribute("photoError", msg("error.image.size", locale));
+            return "redirect:/profile";
+        }
+        byte[] bytes;
+        BufferedImage source;
+        try {
+            bytes = photo.getBytes();
+            if (!isJpeg(bytes) && !isPng(bytes)) {
+                throw new IOException("Unsupported image signature");
+            }
+            source = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (source == null || source.getWidth() < 1 || source.getHeight() < 1
+                    || (long) source.getWidth() * source.getHeight() > 20_000_000L) {
+                throw new IOException("Invalid image data");
+            }
+        } catch (IOException ex) {
+            flash.addFlashAttribute("photoError", msg("error.image.type", locale));
+            return "redirect:/profile";
+        }
+
+        Path directory = new File(uploadDir, "avatars").getAbsoluteFile().toPath().normalize();
+        Path target = directory.resolve(UUID.randomUUID() + ".jpg").normalize();
+        try {
+            Files.createDirectories(directory);
+            BufferedImage output = cropAndResize(source);
+            if (!ImageIO.write(output, "jpg", target.toFile())) {
+                throw new IOException("JPEG encoder unavailable");
+            }
+            String oldPath = profiles.findByUserId(userId).map(FarmerProfile::getPhotoPath).orElse(null);
+            if (profiles.updatePhoto(userId, target.toAbsolutePath().toString()) == 0) {
+                Files.deleteIfExists(target);
+                flash.addFlashAttribute("photoError", msg("profile.photo.error.save", locale));
+                return "redirect:/profile";
+            }
+            deleteOldPhoto(oldPath, directory);
+            flash.addFlashAttribute("photoSuccess", msg("profile.photo.success", locale));
+        } catch (IOException ex) {
+            try {
+                Files.deleteIfExists(target);
+            } catch (IOException ignored) {
+                // Keep the original path; cleanup can be retried by an operator.
+            }
+            flash.addFlashAttribute("photoError", msg("profile.photo.error.save", locale));
+        }
+        return "redirect:/profile";
+    }
+
+    @PostMapping("/profile/photo/remove")
+    public String removePhoto(Authentication auth, RedirectAttributes flash, Locale locale) {
+        Long userId = currentUserId(auth);
+        if (!"FARMER".equals(role(auth))) {
+            return "redirect:/profile";
+        }
+        Path directory = new File(uploadDir, "avatars").getAbsoluteFile().toPath().normalize();
+        String oldPath = profiles.findByUserId(userId).map(FarmerProfile::getPhotoPath).orElse(null);
+        profiles.updatePhoto(userId, null);
+        deleteOldPhoto(oldPath, directory);
+        flash.addFlashAttribute("photoSuccess", msg("profile.photo.removed", locale));
+        return "redirect:/profile";
+    }
+
+    @PostMapping("/profile/email/resend")
+    public String resendVerificationEmail(Authentication auth, RedirectAttributes flash, Locale locale) {
+        Long userId = currentUserId(auth);
+        User user = users.findById(userId).orElseThrow();
+        EmailVerificationService.Dispatch dispatch = emailService.send(userId, user.getEmail());
+        if (dispatch.demo() && dispatch.token() != null) {
+            flash.addFlashAttribute("demoLink", emailService.verificationLink(dispatch.token()));
+        }
+        String key = switch (dispatch.status()) {
+            case SENT -> "profile.email.sent";
+            case ALREADY -> "profile.email.already";
+            case TOO_SOON -> "verify.email.too_soon";
+            case LIMIT -> "verify.email.limit";
+        };
+        flash.addFlashAttribute("emailNotice", msg(key, locale));
+        return "redirect:/profile";
+    }
+
+    private void addRelationships(Model model, Long userId) {
+        model.addAttribute("followingMembers", community.followingMembers(userId));
+        model.addAttribute("followerMembers", community.followerMembers(userId));
+        model.addAttribute("connectionMembers", community.connectionMembers(userId));
+        model.addAttribute("followingIds", new HashSet<>(community.followingIds(userId)));
+    }
+
+    private static BufferedImage cropAndResize(BufferedImage source) {
+        int side = Math.min(source.getWidth(), source.getHeight());
+        int x = (source.getWidth() - side) / 2;
+        int y = (source.getHeight() - side) / 2;
+        BufferedImage output = new BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = output.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.drawImage(source, 0, 0, 256, 256, x, y, x + side, y + side, null);
+        graphics.dispose();
+        return output;
+    }
+
+    private static boolean isPng(byte[] bytes) {
+        byte[] signature = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+        if (bytes.length < signature.length) return false;
+        for (int i = 0; i < signature.length; i++) if (bytes[i] != signature[i]) return false;
+        return true;
+    }
+
+    private static boolean isJpeg(byte[] bytes) {
+        return bytes.length >= 3 && (bytes[0] & 0xff) == 0xff
+                && (bytes[1] & 0xff) == 0xd8 && (bytes[2] & 0xff) == 0xff;
+    }
+
+    private static void deleteOldPhoto(String oldPath, Path directory) {
+        if (oldPath == null || oldPath.isBlank()) return;
+        Path old = Path.of(oldPath).toAbsolutePath().normalize();
+        if (old.startsWith(directory)) {
+            try {
+                Files.deleteIfExists(old);
+            } catch (IOException ignored) {
+                // A failed cleanup does not invalidate the newly saved avatar.
+            }
+        }
+    }
+
+    private static String initials(String name) {
+        String safeName = name == null || name.isBlank() ? "?" : name.trim();
+        String[] words = safeName.split("\\s+");
+        return words.length == 1 ? words[0].substring(0, 1).toUpperCase()
+                : (words[0].substring(0, 1) + words[words.length - 1].substring(0, 1)).toUpperCase();
+    }
+
+    private static String avatarColor(String name) {
+        String[] colors = {"#176b57", "#8b4a26", "#365f9d", "#7b3f66", "#55742f", "#965d13"};
+        return colors[Math.floorMod(name == null ? 0 : name.hashCode(), colors.length)];
     }
 
     /** Same rules as registration, minus username and password. */
@@ -194,7 +380,6 @@ public class ProfileController {
         users.findById(userId).ifPresent(u -> {
             model.addAttribute("accountEmail", u.getEmail());
             model.addAttribute("emailVerified", u.isEmailVerified());
-            model.addAttribute("phoneVerified", u.isPhoneVerified());
         });
     }
 

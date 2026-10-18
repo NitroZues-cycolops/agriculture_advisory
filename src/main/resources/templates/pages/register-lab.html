@@ -150,7 +150,7 @@
                            th:classappend="${errors['phone'] != null} ? ' is-invalid'">
                     <span class="form-error" th:if="${errors['phone'] != null}"
                           th:text="${errors['phone']}">error</span>
-                    <span class="form-hint" th:text="#{labreg.phone.hint}">We send the 6-digit verification code to this number.</span>
+                    <span class="form-hint" th:text="#{labreg.phone.hint}">Used as lab contact data only; account verification uses email.</span>
                 </div>
             </div>
 

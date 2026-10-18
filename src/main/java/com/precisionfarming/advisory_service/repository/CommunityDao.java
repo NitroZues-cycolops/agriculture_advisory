@@ -112,7 +112,8 @@ public class CommunityDao {
             rs.getString("crops"),
             rs.getDouble("farm_area"),
             rs.getString("unit"),
-            rs.getObject("profile_id") != null);
+            rs.getObject("profile_id") != null,
+            rs.getString("photo_path"));
 
     /* ---------- feed ---------- */
 
@@ -208,6 +209,16 @@ public class CommunityDao {
         return n != null && n > 0;
     }
 
+    /** Messaging is allowed when either farmer follows the other. */
+    public boolean canMessage(Long firstId, Long secondId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM follows
+                WHERE (follower_id = ? AND following_id = ?)
+                   OR (follower_id = ? AND following_id = ?)
+                """, Integer.class, firstId, secondId, secondId, firstId);
+        return n != null && n > 0;
+    }
+
     public void follow(Long followerId, Long followingId) {
         jdbc.update("INSERT IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)",
                 followerId, followingId);
@@ -217,6 +228,48 @@ public class CommunityDao {
     public List<Long> followingIds(Long followerId) {
         return jdbc.queryForList(
                 "SELECT following_id FROM follows WHERE follower_id = ?", Long.class, followerId);
+    }
+
+    private static final String PUBLIC_MEMBER_COLUMNS = """
+                 SELECT u.id AS user_id, u.username, fp.id AS profile_id, fp.photo_path,
+                   fp.full_name, fp.district, fp.taluka, fp.village, fp.crops,
+                   fp.farm_area, fp.unit
+            FROM users u
+            LEFT JOIN farmer_profiles fp ON fp.user_id = u.id
+            """;
+
+    public List<Member> followingMembers(Long userId) {
+        return jdbc.query(PUBLIC_MEMBER_COLUMNS + " JOIN follows f ON f.following_id = u.id "
+                        + "WHERE f.follower_id = ? AND u.role = 'FARMER' "
+                        + "ORDER BY COALESCE(fp.full_name, u.username)", MEMBER_MAPPER, userId);
+    }
+
+    public List<Member> followerMembers(Long userId) {
+        return jdbc.query(PUBLIC_MEMBER_COLUMNS + " JOIN follows f ON f.follower_id = u.id "
+                        + "WHERE f.following_id = ? AND u.role = 'FARMER' "
+                        + "ORDER BY COALESCE(fp.full_name, u.username)", MEMBER_MAPPER, userId);
+    }
+
+    public List<Member> connectionMembers(Long userId) {
+        return jdbc.query(PUBLIC_MEMBER_COLUMNS + " JOIN follows f ON f.following_id = u.id "
+                        + "JOIN follows back ON back.follower_id = u.id AND back.following_id = ? "
+                        + "WHERE f.follower_id = ? AND u.role = 'FARMER' "
+                        + "ORDER BY COALESCE(fp.full_name, u.username)", MEMBER_MAPPER, userId, userId);
+    }
+
+    public List<Member> searchMembers(String district, String name) {
+        return jdbc.query("""
+                     SELECT u.id AS user_id, u.username, fp.id AS profile_id, fp.photo_path,
+                       fp.full_name, fp.district, fp.taluka, fp.village, fp.crops,
+                       fp.farm_area, fp.unit
+                FROM users u
+                LEFT JOIN farmer_profiles fp ON fp.user_id = u.id
+                WHERE u.role = 'FARMER'
+                  AND (? = '' OR fp.district = ?)
+                  AND (? = '' OR COALESCE(fp.full_name, u.username) LIKE CONCAT('%', ?, '%'))
+                ORDER BY COALESCE(fp.full_name, u.username)
+                LIMIT 100
+                """, MEMBER_MAPPER, district, district, name, name);
     }
 
     public void unfollow(Long followerId, Long followingId) {
@@ -247,7 +300,7 @@ public class CommunityDao {
     /** Every farmer login with its profile (if any), for the directory. */
     public List<Member> listMembers() {
         return jdbc.query("""
-                SELECT u.id AS user_id, u.username, fp.id AS profile_id,
+                  SELECT u.id AS user_id, u.username, fp.id AS profile_id, fp.photo_path,
                        fp.full_name, fp.district, fp.taluka, fp.village, fp.crops,
                        fp.farm_area, fp.unit
                 FROM users u
@@ -259,7 +312,7 @@ public class CommunityDao {
 
     public Optional<Member> findMember(Long userId) {
         return jdbc.query("""
-                SELECT u.id AS user_id, u.username, fp.id AS profile_id,
+                  SELECT u.id AS user_id, u.username, fp.id AS profile_id, fp.photo_path,
                        fp.full_name, fp.district, fp.taluka, fp.village, fp.crops,
                        fp.farm_area, fp.unit
                 FROM users u
@@ -345,6 +398,28 @@ public class CommunityDao {
                 "SELECT COUNT(*) FROM direct_messages WHERE receiver_id = ? AND is_read = 0",
                 Integer.class, userId);
         return n == null ? 0 : n;
+    }
+
+    public int unreadCountByUsername(String username) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM direct_messages dm
+                JOIN users u ON u.id = dm.receiver_id
+                WHERE u.username = ? AND dm.is_read = 0
+                """, Integer.class, username);
+        return n == null ? 0 : n;
+    }
+
+    /** Inserts only when fewer than 20 messages were sent in the last minute. */
+    public synchronized boolean insertMessageWithinLimit(Long senderId, Long receiverId, String content) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM direct_messages
+                WHERE sender_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)
+                """, Integer.class, senderId);
+        if (count != null && count >= 20) {
+            return false;
+        }
+        insertMessage(senderId, receiverId, content);
+        return true;
     }
 
     private int unreadFrom(Long receiverId, Long senderId) {

@@ -65,9 +65,9 @@ To run on another port (useful when 8080 is busy during testing):
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8091
 ```
 
-The weather scraper starts 20 seconds after boot and then runs every 3 hours. The
-first run fills `weather_cache` / `weather_forecast`; with the college wifi off it
-falls back to the SAMPLE rows and the page still renders (marked `SAMPLE`).
+Weather refresh uses `weather.refresh.cron` (default `0 0 6 * * *`, Asia/Kolkata),
+with a start-up catch-up when the cache is stale. Offline seed rows are explicitly
+marked SAMPLE.
 
 ---
 
@@ -80,15 +80,47 @@ falls back to the SAMPLE rows and the page still renders (marked `SAMPLE`).
 | `lab1`   | `password123` | LAB    | Lab dashboard: queue, advance a request, enter results, PDF report |
 | `owner`  | `password123` | OWNER  | Owner panel, approve/reject labs, edit scheme text, moderate community, `/debug` |
 
-A new lab account can log in **only after the owner approves it**.
+A new farmer or lab account can log in only after its email is verified. A lab also
+requires owner approval. SMS/OTP verification has been removed; the phone field is
+contact information only.
+
+## 5. Email verification
+
+Email links are valid for 24 hours, stored as SHA-256 hashes, single-use, and limited
+to one send per minute and five sends per hour. `app.base-url` must be the externally
+reachable origin used in links (default `http://localhost:8080`). With no SMTP host,
+demo mode shows the link on the verification page and logs only a non-sensitive
+delivery notice; tokens and recipient addresses are not logged.
+
+Set SMTP configuration through environment variables (do not commit credentials):
+
+```bash
+export APP_BASE_URL="http://localhost:8080"
+export SPRING_MAIL_HOST="sandbox.smtp.mailtrap.io"
+export SPRING_MAIL_PORT="587"
+export SPRING_MAIL_USERNAME="your-mailtrap-username"
+export SPRING_MAIL_PASSWORD="your-mailtrap-password"
+export SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH="true"
+export SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE="true"
+./mvnw spring-boot:run
+```
+
+For Gmail, use `smtp.gmail.com`, port `587`, your Gmail address as
+`SPRING_MAIL_USERNAME`, and a Google **App Password** as `SPRING_MAIL_PASSWORD`.
+An App Password requires 2-Step Verification. Never use your normal Gmail password.
+The same auth and STARTTLS variables above apply.
+
+`verify.login.requires=email` is the only supported mode because verification is
+email-only; there is no real SMS provider code or SMS configuration.
 
 ---
 
 ## 5. Pages (top-bar workspaces)
 
 1. `/` Home · 2. `/nowcast` · 3. `/forecast` · 4. `/lab` · 5. `/schemes` ·
-6. `/community` · 7. `/profile`. Plus `/map` (district temperature map),
-`/register`, `/register/lab`, `/owner` (owner only) and `/debug` (owner only).
+6. `/community` · 7. `/profile`. Plus `/farmers` (public farmer directory),
+`/messages` (connected-farmer inbox), `/map` (district map), `/register`,
+`/register/lab`, `/owner` (owner only) and `/debug` (owner only).
 
 ---
 
@@ -101,15 +133,28 @@ A new lab account can log in **only after the owner approves it**.
 bash smoke_test.sh http://localhost:8091
 ```
 
-It logs in with a cookie jar, checks every page for all three roles in all three
-languages (no 404/500, no `??key??`), registers a farmer and a lab, runs the whole
-lab flow (request -> ready -> PDF `%PDF`), exercises the community and the owner
-panel, and prints `RESULT: n passed, m failed`. It creates a few test rows; that is
-fine for a demo database.
+It checks pages in all three languages, exercises email token expiry/reuse and resend
+limits, profile photos, follow relationships, contact privacy, connected-only chat and
+unread state, the lab workflow, community and owner panel. It removes test rows and
+test-owned uploaded files, then prints `RESULT: n passed, m failed`.
+
+## 7. New database update and SQL commands
+
+Apply the additive, re-runnable update after the core schema is installed:
+
+```bash
+cd /home/prab/Prab/Prabjingo/mini_pjt
+mysql -uadvisory -padvisory123 advisory_db < src/main/resources/schema_new.sql
+mysql -uadvisory -padvisory123 advisory_db < src/main/resources/data_new.sql
+```
+
+`schema_new.sql` adds nullable `farmer_profiles.photo_path` and email resend quota
+columns with `information_schema` guards. It never drops existing data.
+`spring.sql.init.mode=never` remains enabled.
 
 ---
 
-## 7. Project layout
+## 8. Project layout
 
 ```
 src/main/java/com/precisionfarming/advisory_service/
@@ -124,7 +169,14 @@ src/main/resources/
   messages*.properties                i18n: base + _en + _hi + _mr
   schema.sql / schema_new.sql         re-runnable DDL
   sample_data.sql / data_new.sql      re-runnable demo data
-uploads/                              generated reports + community photos (outside static)
+uploads/                              reports, community photos and avatars (outside static)
 ```
 
 See **DEBUG_GUIDE.md** for a symptom-to-file troubleshooting table.
+
+The Maharashtra district GeoJSON used by `/map` is kept at
+`src/main/resources/geo/maharashtra_districts.geojson`. It is based on the DataMeet
+Maps community repository (India boundary data), whose README states CC BY 4.0 for
+datasets unless a dataset says otherwise:
+https://github.com/datameet/maps and https://creativecommons.org/licenses/by/4.0/.
+This service contains no JavaScript, SMS gateway, or client-side map/chart library.

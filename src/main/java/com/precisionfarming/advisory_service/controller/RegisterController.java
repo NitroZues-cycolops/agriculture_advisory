@@ -6,7 +6,7 @@ import com.precisionfarming.advisory_service.model.User;
 import com.precisionfarming.advisory_service.repository.DistrictDao;
 import com.precisionfarming.advisory_service.repository.FarmerProfileDao;
 import com.precisionfarming.advisory_service.repository.UserRepository;
-import com.precisionfarming.advisory_service.service.OtpService;
+import com.precisionfarming.advisory_service.service.EmailVerificationService;
 import com.precisionfarming.advisory_service.service.VerificationSessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +17,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,19 +41,19 @@ public class RegisterController {
     private final DistrictDao districts;
     private final PasswordEncoder encoder;
     private final MessageSource messages;
-    private final OtpService otpService;
+    private final EmailVerificationService emailService;
     private final VerificationSessionService sessions;
 
     public RegisterController(UserRepository users, FarmerProfileDao profiles,
                               DistrictDao districts, PasswordEncoder encoder,
-                              MessageSource messages, OtpService otpService,
+                              MessageSource messages, EmailVerificationService emailService,
                               VerificationSessionService sessions) {
         this.users = users;
         this.profiles = profiles;
         this.districts = districts;
         this.encoder = encoder;
         this.messages = messages;
-        this.otpService = otpService;
+        this.emailService = emailService;
         this.sessions = sessions;
     }
 
@@ -86,7 +87,7 @@ public class RegisterController {
     @PostMapping("/register")
     public String submit(@RequestParam Map<String, String> params,
                          @RequestParam(name = "crops", required = false) List<String> crops,
-                         Model model, Locale locale) {
+                         Model model, Locale locale, RedirectAttributes flash) {
 
         Map<String, String> form = new LinkedHashMap<>(params);
         String cropList = crops == null ? "" : String.join(",", crops);
@@ -111,11 +112,9 @@ public class RegisterController {
         user.setUsername(username);
         user.setPassword(encoder.encode(params.get("password")));
         user.setRole("FARMER");
-        // PART B: the account starts UNVERIFIED and cannot log in until the
-        // phone is verified (SecurityConfig disables such an account).
+        // Login remains disabled until the email link confirms this address.
         user.setEmail(email);
         user.setPhone(mobile);
-        user.setPhoneVerified(false);
         user.setEmailVerified(false);
         users.save(user);
 
@@ -135,14 +134,15 @@ public class RegisterController {
         p.setPreferredLang(params.getOrDefault("lang", "en"));
         profiles.insert(p);
 
-        // Send the 6-digit code (demo sender by default: no SMS) and hand the
-        // account a one-time handle so the verify page can identify it.
-        otpService.issue(user.getId(), mobile);
         String handle = sessions.create(user.getId());
+        EmailVerificationService.Dispatch dispatch = emailService.send(user.getId(), email);
+        if (dispatch.demo() && dispatch.token() != null) {
+            flash.addFlashAttribute("demoLink", emailService.verificationLink(dispatch.token()));
+        }
 
-        log.info("[REG] Farmer '{}' registered (district={}), phone verification sent",
+        log.info("[REG] Farmer '{}' registered (district={}), email verification dispatched",
                 username, p.getDistrict());
-        return "redirect:/verify?h=" + handle;
+        return "redirect:/verify/email?h=" + handle + "&sent=1";
     }
 
     /** Server-side rules. Returns field -> translated message (empty = all good). */

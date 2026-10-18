@@ -32,9 +32,6 @@ public class User {
     @Column(length = 15)
     private String phone;
 
-    @Column(name = "phone_verified")
-    private boolean phoneVerified;
-
     @Column(name = "email_verified")
     private boolean emailVerified;
 }

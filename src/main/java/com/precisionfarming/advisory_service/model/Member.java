@@ -17,10 +17,24 @@ public record Member(
         String crops,
         double farmArea,
         String unit,
-        boolean hasProfile) {
+        boolean hasProfile,
+        String photoPath) {
 
     /** The name to print: the saved full name, else the username. */
     public String displayName() {
         return fullName != null && !fullName.isBlank() ? fullName : username;
+    }
+
+    public String initials() {
+        String[] words = displayName().trim().split("\\s+");
+        if (words.length == 1) {
+            return words[0].substring(0, 1).toUpperCase();
+        }
+        return (words[0].substring(0, 1) + words[words.length - 1].substring(0, 1)).toUpperCase();
+    }
+
+    public String avatarColor() {
+        String[] colors = {"#176b57", "#8b4a26", "#365f9d", "#7b3f66", "#55742f", "#965d13"};
+        return colors[Math.floorMod(displayName().hashCode(), colors.length)];
     }
 }

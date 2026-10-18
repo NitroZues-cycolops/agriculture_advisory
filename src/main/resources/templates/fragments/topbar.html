@@ -32,7 +32,7 @@
         <div class="topbar__right">
 
             <!-- phone-only button that ticks the checkbox above -->
-            <label for="nav-toggle" class="nav-toggle-label">
+            <label for="nav-toggle" class="nav-toggle-label" th:attr="aria-label=#{nav.menu}">
                 <span aria-hidden="true">☰</span>
                 <span th:text="#{nav.menu}">Menu</span>
             </label>
@@ -95,6 +95,9 @@
         <a class="workspace-btn" th:classappend="${active == 6} ? 'workspace-btn--active'"
            th:href="@{/community}" accesskey="6" th:title="#{nav.workspace.hint(6)}">
             <span class="workspace-btn__num">[6]</span><span th:text="#{nav.community}">Community</span>
+            <span class="tag tag--warn nav-unread" th:if="${topbarUnread > 0}"
+                th:aria-label="#{nav.messages.unread(${topbarUnread})}"
+                th:text="${topbarUnread}">2</span>
         </a>
         <a class="workspace-btn" th:classappend="${active == 7} ? 'workspace-btn--active'"
            th:href="@{/profile}" accesskey="7" th:title="#{nav.workspace.hint(7)}">

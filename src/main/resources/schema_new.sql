@@ -288,8 +288,8 @@ CREATE TABLE IF NOT EXISTS weather_scrape_run (
 );
 
 -- ---------------------------------------------------------------------
--- 10. PHONE / EMAIL VERIFICATION (PART B)
---     Account-level identity: the email and the mobile number live on the
+-- 10. EMAIL VERIFICATION (PART B)
+--     Account-level identity: the email and mobile contact number live on the
 --     `users` row so both can be checked for uniqueness in ONE place,
 --     whichever role the account has.
 --     NOTE: no UNIQUE key is put on users.phone because a lab may legitimately
@@ -312,13 +312,6 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 SET @s := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
-                AND COLUMN_NAME = 'phone_verified') = 0,
-             'ALTER TABLE users ADD COLUMN phone_verified TINYINT(1) NOT NULL DEFAULT 0',
-             'DO 0');
-PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
-
-SET @s := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
-              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
                 AND COLUMN_NAME = 'email_verified') = 0,
              'ALTER TABLE users ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0',
              'DO 0');
@@ -332,26 +325,6 @@ SET @s := IF((SELECT COUNT(*) FROM information_schema.STATISTICS
              'ALTER TABLE users ADD UNIQUE KEY uq_users_email (email)',
              'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
-
--- One row per user: the phone OTP state. The code is stored HASHED (BCrypt),
--- never in clear; attempts/locked_until implement the 5-try / 15-min lockout;
--- window_start + sends_in_window implement "1 per minute, 5 per hour".
-CREATE TABLE IF NOT EXISTS phone_verification (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id         BIGINT       NOT NULL,
-    phone           VARCHAR(15)  NOT NULL,
-    otp_hash        VARCHAR(100) NOT NULL,
-    attempts        INT          NOT NULL DEFAULT 0,
-    locked_until    DATETIME     NULL,
-    expires_at      DATETIME     NOT NULL,
-    verified_at     DATETIME     NULL,
-    last_sent_at    DATETIME     NOT NULL,
-    window_start    DATETIME     NOT NULL,
-    sends_in_window INT          NOT NULL DEFAULT 1,
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_phone_verif_user (user_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
 
 -- One row per user: the email verification token. The token is stored as a
 -- SHA-256 hex digest (deterministic, so the link can be looked up), never clear.
@@ -369,8 +342,22 @@ CREATE TABLE IF NOT EXISTS email_verification (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- The random handle in the /verify?h=... link. It identifies the account while
--- the user is NOT logged in yet, and it is deleted once the phone is verified.
+SET @s := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'email_verification'
+                AND COLUMN_NAME = 'resend_window_start') = 0,
+             'ALTER TABLE email_verification ADD COLUMN resend_window_start DATETIME NULL',
+             'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+SET @s := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'email_verification'
+                AND COLUMN_NAME = 'sends_in_window') = 0,
+             'ALTER TABLE email_verification ADD COLUMN sends_in_window INT NOT NULL DEFAULT 1',
+             'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+-- The random handle in the /verify/email?h=... link. It identifies the account
+-- while the user is NOT logged in yet, and is deleted after email verification.
 CREATE TABLE IF NOT EXISTS verification_session (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
     handle     VARCHAR(64) NOT NULL UNIQUE,
@@ -399,5 +386,15 @@ CREATE TABLE IF NOT EXISTS district_crops (
     is_sample      TINYINT(1)   NOT NULL DEFAULT 1,
     UNIQUE KEY uq_district_crop (district_code, crop)
 );
+
+-- ---------------------------------------------------------------------
+-- 12. FARMER AVATAR (PART G) - stored outside static and served by controller.
+-- ---------------------------------------------------------------------
+SET @s := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'farmer_profiles'
+                AND COLUMN_NAME = 'photo_path') = 0,
+             'ALTER TABLE farmer_profiles ADD COLUMN photo_path VARCHAR(255) NULL',
+             'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 SELECT 'schema_new.sql applied' AS status;

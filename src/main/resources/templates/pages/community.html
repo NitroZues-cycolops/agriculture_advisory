@@ -39,7 +39,8 @@
             </div>
 
             <p>
-                <a class="btn btn--ghost" th:href="@{/community/messages}"
+                <a class="btn btn--ghost" th:href="@{/farmers}" th:text="#{farmers.title}">Find farmers</a>
+                <a class="btn btn--ghost" th:href="@{/messages}"
                    th:text="#{community.inbox}">Inbox</a>
                 <span class="tag tag--warn" th:if="${unread > 0}"
                       th:text="#{community.inbox.unread(${unread})}">3 unread</span>
@@ -83,6 +84,8 @@
 
             <div class="post" th:each="p : ${posts}">
                 <div class="post__meta">
+                    <img class="avatar avatar--small" th:src="@{/avatar/{id}(id=${p.userId})}"
+                         th:alt="#{community.avatar.alt(${p.authorName})}">
                     <a th:href="@{/community/profile/{id}(id=${p.userId})}"
                        th:text="${p.authorName}">Farmer</a>
                     <span th:if="${p.authorDistrict != null}" th:text="${p.authorDistrict}">Pune</span>
@@ -136,37 +139,9 @@
                th:text="#{community.members.none}">No farmer profiles yet.</p>
 
             <div class="lab-grid" th:unless="${#lists.isEmpty(members)}">
-                <div class="lab-card" th:each="m : ${members}">
-                    <div class="lab-card__name">
-                        <a th:href="@{/community/profile/{id}(id=${m.userId})}"
-                           th:text="${m.displayName()}">Farmer</a>
-                    </div>
-                    <ul class="info-list">
-                        <li th:if="${m.district != null}">
-                            <span class="label" th:text="#{community.profile.district}">District</span>
-                            <span>
-                                <span th:text="${m.district}">Pune</span>
-                                <span th:if="${m.village != null}" th:text="${' / ' + m.village}"> / Wagholi</span>
-                            </span>
-                        </li>
-                    </ul>
-                    <div class="btn-row" th:if="${m.userId != me}" style="margin-top:8px;">
-                        <form th:if="${!following.contains(m.userId)}"
-                              th:action="@{/community/follow/{id}(id=${m.userId})}" method="post">
-                            <input type="hidden" name="back" value="/community">
-                            <button type="submit" class="btn btn--ghost"
-                                    th:text="#{community.follow}">Follow</button>
-                        </form>
-                        <form th:if="${following.contains(m.userId)}"
-                              th:action="@{/community/unfollow/{id}(id=${m.userId})}" method="post">
-                            <input type="hidden" name="back" value="/community">
-                            <button type="submit" class="btn btn--ghost"
-                                    th:text="#{community.unfollow}">Unfollow</button>
-                        </form>
-                        <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${m.userId})}"
-                           th:text="#{community.message}">Message</a>
-                    </div>
-                </div>
+                <th:block th:each="m : ${members}">
+                    <div th:replace="~{fragments/farmer-card :: card(${m}, ${me}, ${following}, '/community', ${chatAllowedIds.contains(m.userId)})}"></div>
+                </th:block>
             </div>
         </div>
     </div>

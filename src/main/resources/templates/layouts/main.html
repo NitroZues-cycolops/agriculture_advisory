@@ -40,13 +40,15 @@
 </head>
 <body>
 
+  <a class="skip-link" href="#main-content" th:text="#{a11y.skip}">Skip to main content</a>
+
     <!-- TOP BAR: app name | workspaces 1-7 | language + user. One shared fragment. -->
     <div th:replace="~{fragments/topbar :: topbar(${active})}"></div>
 
     <!-- TILE AREA: the CSS Grid that fills everything below the top bar.
          th:block (not a div) so the page's tiles land here as DIRECT grid
          children and actually tile. -->
-    <main class="main-container" th:classappend="${layoutClass}">
+    <main id="main-content" class="main-container" th:classappend="${layoutClass}" tabindex="-1">
         <th:block th:replace="${content}"></th:block>
     </main>
 

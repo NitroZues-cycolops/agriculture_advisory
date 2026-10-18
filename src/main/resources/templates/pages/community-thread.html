@@ -6,7 +6,7 @@
             POST /community/messages/{id}   -> CommunityController.send
   ROLE    : any authenticated user (only the two people in the thread)
   LAYOUT  : layout-home -> the message list and a send form.
-  DATA    : other, thread, me, role, unread
+    DATA    : other, thread, me, role, unread, canMessage, messageErrors, messageValue
   NO JAVASCRIPT : a normal POST form; refreshing the page shows new messages.
   If this breaks, check:
     - Messages not delivered -> direct_messages rows (sender_id, receiver_id).
@@ -28,15 +28,33 @@
         <div class="tile__body">
 
             <p style="margin-bottom:12px;">
-                <a class="card__btn" th:href="@{/community/messages}" th:text="#{community.inbox}">Inbox</a>
+                <a class="card__btn" th:href="@{/messages}" th:text="#{community.inbox}">Inbox</a>
                 <a class="card__btn" th:href="@{/community/profile/{id}(id=${other.userId})}"
                    th:text="#{community.profile.title}">Farm profile</a>
+                <a class="card__btn" th:href="@{/messages/{id}(id=${other.userId})}"
+                   th:text="#{community.thread.refresh}">Refresh</a>
             </p>
 
-            <p class="card__text" th:if="${#lists.isEmpty(thread)}"
+            <div class="farmer-card__heading">
+                <img class="avatar avatar--large" th:src="@{/avatar/{id}(id=${other.userId})}"
+                     th:alt="#{community.avatar.alt(${other.displayName()})}">
+                <h1 class="page-head__title" th:text="${other.displayName()}">Farmer</h1>
+            </div>
+
+            <div class="alert alert--warning" th:unless="${canMessage}">
+                <p th:text="#{community.thread.no_access}">Follow this farmer to start a conversation.</p>
+                <form th:if="${!following}" th:action="@{/community/follow/{id}(id=${other.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/messages/' + other.userId}">
+                    <button class="btn btn--primary" type="submit" th:text="#{community.follow}">Follow</button>
+                </form>
+                <p th:if="${following}" th:text="#{community.thread.wait_follow}">You follow this farmer. They need to follow you to enable chat.</p>
+            </div>
+
+            <p class="card__text" th:if="${canMessage and #lists.isEmpty(thread)}"
                th:text="#{community.thread.empty}">No messages yet - write the first one.</p>
 
-            <div class="post" th:each="msg : ${thread}">
+              <div class="post" th:each="msg : ${thread}"
+                  th:classappend="${msg.senderId == me} ? ' message--mine' : ' message--theirs'">
                 <div class="post__meta">
                     <span th:if="${msg.senderId == me}" th:text="#{community.thread.you}">You</span>
                     <span th:if="${msg.senderId != me}" th:text="${other.displayName()}">Farmer</span>
@@ -45,11 +63,15 @@
                 <p class="card__text" th:text="${msg.content}">message</p>
             </div>
 
-            <form th:action="@{/community/messages/{id}(id=${other.userId})}" method="post"
-                  style="margin-top:12px;">
+            <form th:if="${canMessage}" th:action="@{/messages/{id}(id=${other.userId})}" method="post"
+                style="margin-top:12px;">
                 <div class="form-row">
                     <label for="content" th:text="#{community.thread.type}">Your message</label>
-                    <textarea id="content" name="content" maxlength="1000" required></textarea>
+                  <textarea id="content" name="content" maxlength="1000" required
+                        th:classappend="${messageErrors['content'] != null} ? ' is-invalid'"
+                        th:text="${messageValue}"></textarea>
+                  <span class="form-error" th:if="${messageErrors['content'] != null}"
+                      th:text="${messageErrors['content']}">error</span>
                 </div>
                 <button class="btn btn--primary" type="submit"
                         th:text="#{community.thread.send}">Send</button>

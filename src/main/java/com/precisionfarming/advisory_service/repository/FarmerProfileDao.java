@@ -43,6 +43,7 @@ public class FarmerProfileDao {
         p.setIrrigation(rs.getString("irrigation"));
         p.setDescription(rs.getString("description"));
         p.setPreferredLang(rs.getString("preferred_lang"));
+        p.setPhotoPath(rs.getString("photo_path"));
         return p;
     };
 
@@ -67,8 +68,8 @@ public class FarmerProfileDao {
             PreparedStatement ps = con.prepareStatement("""
                     INSERT INTO farmer_profiles
                         (user_id, full_name, phone, district, taluka, village, crops,
-                         farm_area, unit, soil_type, irrigation, description, preferred_lang)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        farm_area, unit, soil_type, irrigation, description, preferred_lang, photo_path)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, p.getUserId());
             ps.setString(2, p.getFullName());
@@ -83,6 +84,7 @@ public class FarmerProfileDao {
             ps.setString(11, p.getIrrigation());
             ps.setString(12, p.getDescription());
             ps.setString(13, p.getPreferredLang());
+            ps.setString(14, p.getPhotoPath());
             return ps;
         }, key);
         Number id = key.getKey();
@@ -101,6 +103,11 @@ public class FarmerProfileDao {
                 p.getFullName(), p.getPhone(), p.getDistrict(), p.getTaluka(), p.getVillage(),
                 p.getCrops(), p.getFarmArea(), p.getUnit(), p.getSoilType(), p.getIrrigation(),
                 p.getDescription(), p.getPreferredLang(), p.getUserId());
+    }
+
+    public int updatePhoto(Long userId, String photoPath) {
+        return jdbc.update("UPDATE farmer_profiles SET photo_path = ? WHERE user_id = ?",
+                photoPath, userId);
     }
 
     /** Names of every farmer who has a profile - used by the STEP 7 owner counts. */

@@ -39,8 +39,8 @@ public class SecurityConfig implements WebMvcConfigurer {
             )
             .formLogin(form -> form
                 .loginPage("/login")
-                // PART B: an account whose phone is not verified (or a lab that the
-                // owner has not approved) is DISABLED, and Spring Security throws
+                // Unverified email (or a lab the owner has not approved) is DISABLED.
+                // Spring Security throws
                 // DisabledException. That is not the same as a wrong password, so
                 // the visitor gets its own message plus a "resend the code" form
                 // instead of the generic credentials error.
@@ -70,7 +70,7 @@ public class SecurityConfig implements WebMvcConfigurer {
                 // Until then the account is disabled, so Spring Security rejects
                 // the login (DisabledException) instead of letting a PENDING lab
                 // into the dashboard.
-                .disabled(labNotApproved(u, labDao) || phoneNotVerified(u))
+                .disabled(labNotApproved(u, labDao) || emailNotVerified(u))
                 .build())
             .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
@@ -83,14 +83,9 @@ public class SecurityConfig implements WebMvcConfigurer {
                         .orElse(false);
     }
 
-    /**
-     * PART B: a self-registered FARMER or LAB may not log in until the phone on
-     * the account is verified. The seeded demo accounts are marked verified in
-     * data_new.sql, so they keep working. The owner account is not affected.
-     */
-    private static boolean phoneNotVerified(com.precisionfarming.advisory_service.model.User u) {
-        return !u.isPhoneVerified()
-                && ("FARMER".equals(u.getRole()) || "LAB".equals(u.getRole()));
+    /** Self-registered farmers and labs may log in only after email verification. */
+    private static boolean emailNotVerified(com.precisionfarming.advisory_service.model.User u) {
+        return !u.isEmailVerified() && ("FARMER".equals(u.getRole()) || "LAB".equals(u.getRole()));
     }
 
     @Bean

@@ -420,30 +420,30 @@ UPDATE alerts
 
 -- =====================================================================
 -- 8. DEMO ACCOUNTS ALREADY VERIFIED (PART B)
---    Login of a FARMER is blocked until the phone is verified, so the six
---    demo accounts must carry a verified phone (and email) or the demo would
+--    Login of a FARMER is blocked until the email is verified, so the six
+--    demo accounts must carry a verified email or the demo would
 --    stop working. The emails/phones below match the values already seeded in
 --    farmer_profiles / labs - they are DEMO contact data, not invented people.
 --    Re-runnable AND non-destructive: a WHERE ... email IS NULL means a real
 --    registration made later is never overwritten by this script.
 -- =====================================================================
 UPDATE users SET email = 'farmer1@example.com', phone = '9876543210',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'farmer1' AND email IS NULL;
 UPDATE users SET email = 'farmer2@example.com', phone = '9876543211',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'farmer2' AND email IS NULL;
 UPDATE users SET email = 'farmer3@example.com', phone = '9876543212',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'farmer3' AND email IS NULL;
 UPDATE users SET email = 'lab1@example.com', phone = '022-1234567',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'lab1' AND email IS NULL;
 UPDATE users SET email = 'lab2@example.com', phone = '020-7654321',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'lab2' AND email IS NULL;
 UPDATE users SET email = 'owner@example.com', phone = '9876543299',
-                 phone_verified = 1, email_verified = 1
+                 email_verified = 1
  WHERE username = 'owner' AND email IS NULL;
 
 -- =====================================================================

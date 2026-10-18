@@ -26,6 +26,7 @@ public class FarmerProfile {
     private String irrigation;
     private String description;
     private String preferredLang;
+    private String photoPath;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -68,4 +69,7 @@ public class FarmerProfile {
 
     public String getPreferredLang() { return preferredLang; }
     public void setPreferredLang(String preferredLang) { this.preferredLang = preferredLang; }
+
+    public String getPhotoPath() { return photoPath; }
+    public void setPhotoPath(String photoPath) { this.photoPath = photoPath; }
 }

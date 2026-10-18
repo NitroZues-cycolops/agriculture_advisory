@@ -90,6 +90,25 @@ html {
     height: 100%;
 }
 
+.skip-link {
+    position: fixed;
+    z-index: 1000;
+    top: 8px;
+    left: 8px;
+    padding: 10px 14px;
+    color: #07140f;
+    background: #f6ce63;
+    border-radius: var(--radius-sm);
+    transform: translateY(-160%);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid #f6ce63;
+    outline-offset: 3px;
+}
+
 /* The desktop page never scrolls: only .main-container does.
    Background = near-black navy + two soft radial glows + a faint dot grid. */
 body {
@@ -332,14 +351,13 @@ button {
 
 
 /* ========== 4. TILE + CARD ========== */
-/* A tile IS the card: dark surface, 1px border, 18px radius, soft shadow,
-   a thin title bar and a body that scrolls if the content is tall. */
+/* A tile IS the card: content grows into the page's single main scroll area. */
 .tile {
     display: flex;
     flex-direction: column;
     min-height: 0;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
@@ -383,12 +401,12 @@ button {
     text-overflow: ellipsis;
 }
 
-/* only the inside of a tile scrolls */
+/* Content does not create nested scroll areas; the main landmark scrolls. */
 .tile__body {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: auto;
     padding: 24px;
-    overflow: auto;
+    overflow: visible;
 }
 
 /* centred card body: emoji icon, title, description, pill button */
@@ -778,7 +796,7 @@ button {
 .alert--severe  { border-left-color: var(--danger); }
 .alert--info    { border-left-color: var(--accent); }
 
-/* --- 6c-2. DEMO MODE BOX (PART B: OTP / email without a real provider) --- */
+/* --- 6c-2. DEMO MODE BOX (email verification without SMTP) --- */
 .demo-box {
     padding: 10px 14px;
     margin-bottom: 12px;
@@ -1210,6 +1228,54 @@ button {
     align-items: center;
 }
 
+.avatar {
+    display: block;
+    width: 52px;
+    height: 52px;
+    flex: 0 0 auto;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface-3);
+}
+
+.avatar--large { width: 88px; height: 88px; }
+.avatar--small { width: 34px; height: 34px; }
+.avatar--initials {
+    display: inline-grid;
+    place-items: center;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    text-decoration: none;
+}
+.avatar--small.avatar--initials { font-size: 14px; }
+
+.farmer-card__heading,
+.profile-photo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.farmer-card__details { margin-top: 10px; }
+.farmer-card__actions { margin-top: 10px; }
+.profile-photo__actions { min-width: 0; flex: 1; }
+.profile-photo__actions form { margin-top: 8px; }
+.nav-unread { padding: 2px 7px; }
+
+.message--mine {
+    width: min(76%, 720px);
+    margin-left: auto;
+    border-color: var(--accent);
+}
+
+.message--theirs { width: min(76%, 720px); }
+
+.farmers-filter { align-items: end; }
+.farmers-filter__submit { padding-bottom: 2px; }
+
 /* --- 6l. SAMPLE DATA NOTICE --- */
 .sample-note {
     padding: 8px 12px;
@@ -1301,6 +1367,9 @@ button {
         min-height: 100vh;
         overflow: auto;
     }
+
+    .profile-photo { align-items: flex-start; }
+    .message--mine, .message--theirs { width: 100%; }
 
     /* --- compact top bar --- */
     .topbar__bar {

@@ -495,6 +495,74 @@ Assumptions (viva notes):
 Remaining: PART E (usability pass), PART F (docs + final output).
 
 
+## PART G — Profile picture, connections and chat — DONE
+
+- [x] Added guarded nullable `farmer_profiles.photo_path`; apply with
+      `mysql -uadvisory -padvisory123 advisory_db < src/main/resources/schema_new.sql`.
+- [x] `/profile/photo` accepts JPG/PNG only by magic bytes + ImageIO decoding, caps uploads at
+      2 MB, center-crops/resizes to 256x256 and re-encodes JPEG under absolute `uploads/avatars`;
+      replace/remove clears the previous in-folder file. `/avatar/{userId}` requires login,
+      serves JPEG or an escaped initials SVG fallback. The profile and public cards use CSS
+      initials/color when no upload exists.
+- [x] `/profile` now shows Following, Followers and mutual Connections with public farmer cards
+      (name, district, taluka, crops only), follow/unfollow, view-profile and eligible chat links.
+      `/farmers` filters by district/name. Public member projections omit phone and email.
+- [x] `/messages` and `/messages/{userId}` are the inbox/thread; old `/community/messages` paths
+      remain compatible. Either-direction follow permits a thread. Both GET and POST deny an
+      unconnected farmer with 403 and a follow action. Validation preserves typed content, enforces
+      1..1000 characters and 20 outgoing messages/minute. Opening threads marks incoming messages
+      read. The top bar gets one cheap unread COUNT through `@ControllerAdvice`.
+- [x] Avatars render beside community post/comment authors, in farmer cards, inbox and chat.
+- [x] Extended smoke coverage for avatar auth/fallback/upload/renamed-text/size/remove, follow and
+      mutual counts/lists, both chat directions and denial, unread/read, overlong text, privacy,
+      plus test file/row cleanup.
+- [x] `./mvnw -q compile` -> EXIT 0. Full smoke on port 8095 -> **126 passed, 0 failed**.
+- [x] DB verified after smoke: 0 smoke-prefixed users, 0 corresponding email-verification rows;
+      seeded demo users remain verified. Local schema update applied; `spring.sql.init.mode=never`
+      and datasource settings unchanged.
+
+Assumptions: profile pictures are center-cropped (not face-detected); uploads are not published
+under `static`; phone remains an account contact field but is not rendered in public cards.
+
+Files changed: `schema_new.sql`, `application.properties`, `User.java`, `FarmerProfile.java`,
+`Member.java`, `CommunityDao.java`, `FarmerProfileDao.java`, `CommunityController.java`,
+`ProfileController.java`, new `AvatarController.java`, `FarmerDirectoryController.java`,
+`TopbarModelAdvice.java`, templates `profile.html`, `farmers.html`, `farmer-card.html`, community
+feed/post/profile/inbox/thread, `topbar.html`, `style.css`, all four message bundles, and
+`smoke_test.sh`.
+
+What to run: apply `schema_new.sql` once/re-runnable, then restart the app. The current smoke
+suite also applies/deletes only its own test data and files.
+
+## PART H — Email-only verification — DONE
+
+- [x] Removed OTP service/senders, phone verification controller routes/view/DAO/model and fresh
+      `phone_verification` table creation. Phone remains contact data only; no SMS provider code.
+- [x] Email verification is the sole login gate for farmers/labs; lab approval remains separate.
+      Email uses a random token stored as SHA-256, 24-hour expiry, one-use invalidation, demo link
+      when SMTP is absent, plain-text + HTML real email when configured, and 60-second / 5-per-hour
+      resend limits. Link origin comes from `app.base-url`.
+- [x] Profile displays verification state and resend action. Registration sends email immediately.
+      Demo accounts remain email-verified in `data_new.sql`.
+- [x] Added localized email-only messages and smoke coverage for blocked/unblocked login, demo
+      link, expiry, one-use token and resend caps. `.gitignore` covers local secret files.
+- [x] `./mvnw -q compile` -> EXIT 0. Full smoke -> **126 passed, 0 failed** before the final
+      instruction cleanup/documentation edits; rerun after remaining Part E/F changes.
+- [x] Datasource settings unchanged and `spring.sql.init.mode=never` retained.
+
+Setup: set `APP_BASE_URL`; optionally set the six `SPRING_MAIL_*` environment variables listed in
+README.md for Mailtrap or Gmail App Password. No SQL `DROP` is used. The guarded new schema also
+adds email resend counters; exact commands are documented in README.md.
+
+## Remaining
+
+- [ ] Part D: existing 7-day forecast details and SVG charts already pass; extend smoke for source,
+      tips and a single chart/text alternative requirement if needed.
+- [ ] Part E: finish the page-by-page accessibility/usability pass and add practical smoke checks.
+- [ ] Part F: finish documentation/property/GeoJSON license review, add cleanup/photo/verification
+      assertions, inspect the final DB state, and capture the final full smoke output.
+
+
 ---
 
 ## Reusable commands
