@@ -40,13 +40,18 @@
 </head>
 <body>
 
+    <!-- UI step 2: skip-to-content link. It is the first thing a keyboard user
+         reaches on Tab and jumps straight past the top bar to the tiles. It is
+         off-screen until focused, then styled by .skip-link in style.css. -->
+    <a class="skip-link" href="#main" th:text="#{a11y.skip}">Skip to content</a>
+
     <!-- TOP BAR: app name | workspaces 1-7 | language + user. One shared fragment. -->
     <div th:replace="~{fragments/topbar :: topbar(${active})}"></div>
 
     <!-- TILE AREA: the CSS Grid that fills everything below the top bar.
          th:block (not a div) so the page's tiles land here as DIRECT grid
          children and actually tile. -->
-    <main class="main-container" th:classappend="${layoutClass}">
+    <main id="main" class="main-container" th:classappend="${layoutClass}">
         <th:block th:replace="${content}"></th:block>
     </main>
 
