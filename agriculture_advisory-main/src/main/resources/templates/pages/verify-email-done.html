@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : The page the emailed verification link lands on (PART B).
+            It only reports the outcome; there is nothing to fill in.
+  ROUTE   : GET /verify/email/confirm?token=...  -> VerifyController.confirmEmail
+            The token is a random string; only its SHA-256 hash is stored.
+  ROLE    : public
+  LAYOUT  : layout-center -> one small tile (a result message + a login link).
+  DATA    : result -> OK | INVALID | EXPIRED | ALREADY (used by th:switch)
+            ok     -> true for OK and ALREADY (drives the alert colour)
+  NO JAVASCRIPT.
+  If this breaks, check:
+    - Always "not valid" -> the token in the link was changed/truncated, or the
+      link was already used after the token expired (email.token.hours).
+    - Untranslated text -> verify.email.done.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-center', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: verify-email-done | controller: VerifyController -->
+    <div class="tile" id="tile-verify-email-done" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{verify.email.done.title}">[1] Email verification</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="alert alert--success" th:if="${ok}" th:switch="${result}">
+                <span aria-hidden="true">&#9989;</span>
+                <span th:case="'ALREADY'" th:text="#{verify.email.done.already}">This email address was already verified.</span>
+                <span th:case="*" th:text="#{verify.email.done.ok}">Thank you. Your email address is now verified.</span>
+            </div>
+
+            <div class="alert alert--warning" th:switch="${result}" th:unless="${ok}">
+                <span aria-hidden="true">&#9888;</span>
+                <span th:case="'EXPIRED'" th:text="#{verify.email.done.expired}">This link has expired.</span>
+                <span th:case="*" th:text="#{verify.email.done.invalid}">This link is not valid.</span>
+            </div>
+
+            <p class="btn-row">
+                <a class="btn btn--primary" th:href="@{/login}" th:text="#{verify.email.done.login}">Go to login</a>
+                <a class="btn" th:href="@{/}" th:text="#{nav.home}">Home</a>
+            </p>
+
+        </div>
+    </div>
+    <!-- TILE END: verify-email-done -->
+
+</th:block>
+
+</body>
+</html>

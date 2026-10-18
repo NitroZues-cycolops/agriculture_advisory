@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Shown when a /verify?h=... link is unknown or has expired
+            (PART B). For safety the handle is only valid for
+            verification.handle.hours (default 24), so an old link simply
+            stops working instead of leaving an account half-verifiable.
+  ROUTE   : any /verify request whose `h` cannot be resolved
+            -> VerifyController.linkExpired -> pages/verify-link
+  ROLE    : public
+  LAYOUT  : layout-center -> one small tile with the message and two links.
+  DATA    : none
+  NO JAVASCRIPT.
+  If this breaks, check:
+    - The page appears right after registering -> `h` was lost from the URL, or
+      the verification_session row was deleted (expired).
+    - Untranslated text -> verify.link.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-center', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: verify-link | controller: VerifyController -->
+    <div class="tile" id="tile-verify-link" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{verify.link.title}">[1] This link has expired</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="alert alert--warning">
+                <span aria-hidden="true">&#9888;</span>
+                <span th:text="#{verify.link.body}">
+                    For your safety a verification link is valid for a limited time.
+                </span>
+            </div>
+
+            <p class="btn-row">
+                <a class="btn btn--primary" th:href="@{/login}" th:text="#{verify.link.login}">Go to login</a>
+                <a class="btn" th:href="@{/register}" th:text="#{auth.signup}">Sign Up</a>
+            </p>
+
+        </div>
+    </div>
+    <!-- TILE END: verify-link -->
+
+</th:block>
+
+</body>
+</html>

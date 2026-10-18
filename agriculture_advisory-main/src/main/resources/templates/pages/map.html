@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : District map (PART C - REAL GIS MAPS). A server-rendered inline
+            SVG of Maharashtra. Every district is a <path> boundary (from an
+            open GeoJSON file, projected to SVG coordinates in Java) inside an
+            <a> link, with an SVG <title> for the hover tooltip and a label
+            where the district is big enough.
+  ROUTE   : GET /map?layer=<layer>&crop=<ref|live>&district=<code>
+            (WeatherController.map)
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> header tile, a wide map tile, a narrow side tile and
+            a full-width district table tile.
+  LAYERS  : temp / heat / rain / rainheat / wind / crop (six ordinary links).
+            heat and rainheat draw an interpolated surface (an IDW grid computed
+            in Java) as <rect> cells inside a <g> clipped to the state outline;
+            the district paths then draw only their borders on top.
+  DATA    : shapes        -> List<MapShape> (code, name, path, cssClass, tooltip,
+                            showLabel, labelX, labelY)
+            rows          -> List<MapRow>   the accessible table below
+            heatRects     -> List<HeatRect> the interpolated cells
+            outlinePath   -> the state outline used as the SVG <clipPath>
+            geoReady      -> false when the boundary file could not be loaded
+            layer / cropSource / cropLayer / heatMode
+            legendLabels / legendCrops / cropNote
+            districts / selectedCode / selectedName / selected / reading /
+            readingTime / selectedCrop / selectedFarmers
+            mapW / mapH   -> the SVG viewBox size
+  HOW IT WORKS WITHOUT JAVASCRIPT
+            - The projection (lon/lat -> x/y) and the heat interpolation are
+              computed in Java, so the template only draws shapes.
+            - Layer switching and the crop source toggle are plain links.
+            - Every district is an <a> to ?district=<code>; the browser shows
+              the path's <title> as a tooltip on hover.
+  If this breaks, check:
+    - No map, only the table -> the GeoJSON file is missing; look for the
+      "[MAP]" warning in the log and check src/main/resources/geo/.
+    - Everything grey -> weather_cache has no row for those districts; run
+      data_new.sql section 6 or wait for the scheduled job.
+    - Text as a missing key -> map.* / crop.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 2)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: map-header | controller: WeatherController.map | full-width -->
+    <div class="tile tile--span" id="tile-map-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{map.title}">[2] District map</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{map.title}">District map of Maharashtra</h1>
+                <p class="page-head__sub" th:text="#{map.intro}">Pick a layer, then click a district to read its latest value.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: map-header -->
+
+    <!-- TILE START: map-canvas | controller: WeatherController.map | wide -->
+    <div class="tile tile--map" id="tile-map-canvas">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{map.layer.switch}">[2] Layer</span>
+        </div>
+        <div class="tile__body">
+            <!-- Layer switching: six plain links, no JavaScript. -->
+            <p class="btn-row">
+                <a class="btn" th:classappend="${layer == 'temp'} ? ' btn--primary'"
+                   th:href="@{/map(layer='temp', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.temp}">Temperature (°C)</a>
+                <a class="btn" th:classappend="${layer == 'heat'} ? ' btn--primary'"
+                   th:href="@{/map(layer='heat', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.heat}">Temperature heat map</a>
+                <a class="btn" th:classappend="${layer == 'rain'} ? ' btn--primary'"
+                   th:href="@{/map(layer='rain', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.rain}">Rain</a>
+                <a class="btn" th:classappend="${layer == 'rainheat'} ? ' btn--primary'"
+                   th:href="@{/map(layer='rainheat', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.rainheat}">Rain heat map</a>
+                <a class="btn" th:classappend="${layer == 'wind'} ? ' btn--primary'"
+                   th:href="@{/map(layer='wind', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.wind}">Wind speed (km/h)</a>
+                <a class="btn" th:classappend="${layer == 'crop'} ? ' btn--primary'"
+                   th:href="@{/map(layer='crop', district=${selectedCode}, crop=${cropSource})}"
+                   th:text="#{map.layer.crop}">Major crops</a>
+            </p>
+
+            <!-- Crop source toggle: reference table (SAMPLE) or live farmer data. -->
+            <p class="btn-row" th:if="${cropLayer}">
+                <a class="btn" th:classappend="${cropSource == 'ref'} ? ' btn--primary'"
+                   th:href="@{/map(layer='crop', crop='ref', district=${selectedCode})}"
+                   th:text="#{map.crop.ref}">Reference (SAMPLE)</a>
+                <a class="btn" th:classappend="${cropSource == 'live'} ? ' btn--primary'"
+                   th:href="@{/map(layer='crop', crop='live', district=${selectedCode})}"
+                   th:text="#{map.crop.live}">Live farmer data</a>
+            </p>
+
+            <p class="sample-note" th:if="${!geoReady}" th:text="#{map.geo_missing}">The district boundary file could not be loaded.</p>
+
+            <div class="map-wrap" th:if="${geoReady}">
+                <svg class="map-svg" role="img" th:aria-label="#{map.title}"
+                     th:attr="viewBox=${'0 0 ' + mapW + ' ' + mapH}">
+                    <!-- The state outline, reused to clip the heat surface. -->
+                    <defs>
+                        <clipPath id="state">
+                            <path th:attr="d=${outlinePath}"></path>
+                        </clipPath>
+                    </defs>
+
+                    <!-- Interpolated heat surface (heat / rainheat layers only).
+                         pointer-events:none, so district links stay clickable. -->
+                    <g class="heat-layer" clip-path="url(#state)" th:if="${heatMode}">
+                        <rect class="heat-cell" th:each="h : ${heatRects}"
+                              th:classappend="${h.cssClass()}"
+                              th:attr="x=${h.x()},y=${h.y()},width=${h.w()},height=${h.h()}"></rect>
+                    </g>
+
+                    <!-- One link + one boundary path per district. -->
+                    <a th:each="s : ${shapes}" tabindex="0"
+                       th:href="@{/map(district=${s.code()}, layer=${layer}, crop=${cropSource})}">
+                        <path class="district"
+                              th:classappend="${(heatMode ? 'district--heat' : s.cssClass()) + (s.code() == selectedCode ? ' district--selected' : '')}"
+                              th:attr="d=${s.path()}">
+                            <!-- Shown by the browser as the shape's tooltip. -->
+                            <title th:text="${s.tooltip}">Pune - 31 °C</title>
+                        </path>
+                    </a>
+
+                    <!-- Labels drawn last, above every path, so none is covered. -->
+                    <text class="district-label" th:each="s : ${shapes}"
+                          th:if="${s.showLabel()}"
+                          th:attr="x=${s.labelX()},y=${s.labelY()}"
+                          th:text="${s.name()}">Pune</text>
+                </svg>
+            </div>
+
+            <!-- Legend: values layers use the .band-* colours, the crop layer
+                 uses the .crop-* colours - the same classes as the shapes. -->
+            <div class="map-legend" th:if="${geoReady and !cropLayer}">
+                <span class="map-legend__item" th:each="label, iter : ${legendLabels}">
+                    <span class="map-legend__swatch" th:classappend="${'band-' + iter.index}"></span>
+                    <span th:text="${label}">15-20</span>
+                </span>
+                <span class="map-legend__item">
+                    <span class="map-legend__swatch band-none"></span>
+                    <span th:text="#{map.no_reading}">No reading</span>
+                </span>
+            </div>
+            <div class="map-legend" th:if="${geoReady and cropLayer}">
+                <span class="map-legend__item" th:each="c : ${legendCrops}">
+                    <span class="map-legend__swatch" th:classappend="${'crop-' + c}"></span>
+                    <span th:text="#{crop.__${c}__}">Rice</span>
+                </span>
+            </div>
+
+            <p class="sample-note" th:if="${cropNote}" th:text="#{map.crop.note}">The crop shares come from a SAMPLE reference table.</p>
+            <p class="sample-note" th:text="#{map.approx}">District boundaries come from an open GeoJSON dataset.</p>
+        </div>
+    </div>
+    <!-- TILE END: map-canvas -->
+
+    <!-- TILE START: map-side | controller: WeatherController.map | narrow -->
+    <div class="tile tile--side" id="tile-map-side">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{map.pick}">[2] Select a district</span>
+        </div>
+        <div class="tile__body">
+            <form th:action="@{/map}" method="get">
+                <input type="hidden" name="layer" th:value="${layer}">
+                <input type="hidden" name="crop" th:value="${cropSource}">
+                <div class="form-row">
+                    <label for="district" th:text="#{map.pick}">Select a district</label>
+                    <select id="district" name="district">
+                        <option th:each="d : ${districts}"
+                                th:value="${d.code()}"
+                                th:selected="${d.code() == selectedCode}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                </div>
+                <button class="btn btn--primary btn--block" type="submit"
+                        th:text="#{nowcast.show}">Show</button>
+            </form>
+
+            <th:block th:if="${selectedCode != null}">
+                <h2 class="card__title" style="margin-top:14px;" th:text="${selectedName}">Raigad</h2>
+
+                <p class="tag" th:if="${selectedCrop != null}">
+                    <span th:text="#{map.crop.farmers}">Registered farmers</span>
+                    <span th:text="${selectedFarmers}">3</span>
+                </p>
+                <ul class="info-list">
+                    <li th:if="${selectedCrop != null}">
+                        <span class="label" th:text="#{map.layer.crop}">Major crops</span>
+                        <span th:text="${selectedCrop}">Rice</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{nowcast.temp}">Temperature</span>
+                        <span th:text="${reading != null and reading.temperature != null} ? ${reading.temperature} : '—'">30 °C</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{nowcast.rain}">Rain</span>
+                        <span th:text="${reading != null and reading.rain != null} ? ${reading.rain} : '—'">0 mm</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{nowcast.wind}">Wind</span>
+                        <span th:text="${reading != null and reading.wind != null} ? ${reading.wind} : '—'">6 km/h</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{nowcast.last_updated}">Last updated</span>
+                        <span th:text="${readingTime != null} ? ${readingTime} : #{nowcast.never}">18 Oct 2026, 10:30</span>
+                    </li>
+                </ul>
+                <p class="card__text" th:if="${reading == null}" th:text="#{nowcast.no_data}">No reading yet.</p>
+                <p><a class="card__btn" th:href="@{/nowcast(district=${selectedCode})}"
+                      th:text="#{nowcast.open_nowcast}">Open the nowcast</a></p>
+            </th:block>
+
+            <p class="card__text" th:if="${selectedCode == null}" th:text="#{map.none}">Click a district on the map, or choose one from the list.</p>
+        </div>
+    </div>
+    <!-- TILE END: map-side -->
+
+    <!-- TILE START: map-table | controller: WeatherController.map | full-width -->
+    <div class="tile tile--span" id="tile-map-table">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{map.table.title}">[2] District values</span>
+        </div>
+        <div class="tile__body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{map.table.district}">District</th>
+                        <th th:text="#{map.table.value}">Value</th>
+                        <th th:if="${cropLayer}" th:text="#{map.table.farmers}">Farmers</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${rows}">
+                        <td>
+                            <a th:href="@{/map(district=${r.code()}, layer=${layer}, crop=${cropSource})}"
+                               th:text="${r.name()}">Pune</a>
+                        </td>
+                        <td th:text="${r.valueText()} != null ? ${r.valueText()} : #{map.no_reading}">31 °C</td>
+                        <td th:if="${cropLayer}" th:text="${r.farmers()}">3</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: map-table -->
+
+</th:block>
+
+</body>
+</html>

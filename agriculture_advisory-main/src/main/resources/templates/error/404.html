@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : 404 Not Found page, styled in the same tile layout.
+  ROUTE   : GET /error   (CustomErrorController, when status = 404)
+  LAYOUT  : layout-single -> one tile filling the window.
+  DATA    : none. `active` is 0 because the user is not in a workspace.
+  If this breaks, check:
+    - A bad URL shows the default Whitelabel page instead of this tile ->
+      CustomErrorController.handleError must return "error/404".
+    - Text shows as a missing key -> error.404.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-single', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: error-404 | controller: CustomErrorController -->
+    <div class="tile" id="tile-error-404" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[!] ' + #{error.404.title}">[!] 404 - Page Not Found</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">🔍</span>
+            <h2 th:text="#{error.404.heading}">Oops! Page not found.</h2>
+            <p th:text="#{error.404.message}">The page you are looking for may have been moved.</p>
+            <a class="btn btn--primary" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+        </div>
+    </div>
+    <!-- TILE END: error-404 -->
+
+</th:block>
+
+</body>
+</html>

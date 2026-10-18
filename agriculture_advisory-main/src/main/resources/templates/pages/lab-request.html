@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : One lab request, opened by its tracking id - STEP 5. Shows the
+            CSS tracker, the status history, the measured values and the
+            report download link.
+  ROUTE   : GET /lab/request/{trackingId}   (LabController.tracker)
+  ROLE    : the request's own farmer, its own lab, or the OWNER.
+            Anybody else gets a 404 - the page never says whether somebody
+            else's tracking id exists.
+  LAYOUT  : layout-home -> full-width header, the tracker, the result.
+  DATA    : request, history, result, reportReady
+  NO JAVASCRIPT : the tracker is styled CSS; the report is a normal link.
+  If this breaks, check:
+    - 404 -> the tracking id is not yours, or you typed it with the wrong
+      case (it is exactly "TRK-1001").
+    - No download button -> the lab has not moved the request to
+      "Report Ready" yet (LabStatus.next()).
+    - Text as a missing key -> lab.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 4)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: labreq-header | controller: LabController.tracker | full-width -->
+    <div class="tile tile--span" id="tile-labreq-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.tracker.title}">[4] Sample tracker</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="${request.trackingId}">TRK-1001</h1>
+                <p class="page-head__sub" th:text="#{lab.tracker.intro}">Follow your sample through the lab.</p>
+            </div>
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{lab.field.lab}">Lab</span>
+                    <span th:text="${request.labName}">Lab</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.district}">District</span>
+                    <span th:text="${request.labDistrict}">Raigad</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.form.sample}">Sample</span>
+                    <span th:text="${#messages.msg('sample.' + #strings.toLowerCase(request.sampleType))}">Soil</span>
+                </li>
+                <li th:if="${request.crop != null}">
+                    <span class="label" th:text="#{lab.form.crop}">Crop</span>
+                    <span th:text="${#messages.msg('crop.' + #strings.toLowerCase(request.crop))}">Rice</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.status}">Status</span>
+                    <span th:text="${#messages.msg(request.stage().messageKey())}">Request Submitted</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.created}">Requested on</span>
+                    <span th:text="${#temporals.format(request.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026, 10:30</span>
+                </li>
+                <li th:if="${request.notes != null}">
+                    <span class="label" th:text="#{lab.form.notes}">Notes for the lab</span>
+                    <span th:text="${request.notes}">-</span>
+                </li>
+            </ul>
+
+            <p style="margin-top:14px;">
+                <a class="btn" th:href="@{/lab}" th:text="#{lab.mine.back}">Back to my requests</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: labreq-header -->
+
+    <!-- TILE START: labreq-tracker | controller: LabController.tracker -->
+    <div class="tile tile--form" id="tile-labreq-tracker" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.tracker.progress}">[4] Progress</span>
+        </div>
+        <div class="tile__body">
+
+            <!-- Five stages, the ones up to the current stage filled in. -->
+            <ol class="stepper">
+                <li class="stepper__step" th:each="stage : ${request.stages()}"
+                    th:classappend="${stage.isDoneAt(request.stage())} ? ' stepper__step--done'"
+                    th:text="${#messages.msg(stage.messageKey())}">Request Submitted</li>
+            </ol>
+
+            <h2 class="card__title" style="margin-top:16px;" th:text="#{lab.tracker.history}">Status history</h2>
+            <ul class="info-list" th:unless="${#lists.isEmpty(history)}">
+                <li th:each="e : ${history}">
+                    <span class="label" th:text="${#temporals.format(e.changedAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span>
+                        <span th:text="${#messages.msg(e.messageKey())}">Sample Received</span>
+                        <span th:if="${e.note != null}" th:text="${' - ' + e.note}"> - note</span>
+                    </span>
+                </li>
+            </ul>
+            <p class="card__text" th:if="${#lists.isEmpty(history)}"
+               th:text="#{lab.tracker.no_history}">No status change recorded yet.</p>
+        </div>
+    </div>
+    <!-- TILE END: labreq-tracker -->
+
+    <!-- TILE START: labreq-result | controller: LabController.tracker -->
+    <div class="tile tile--form" id="tile-labreq-result" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.tracker.result}">[4] Test result</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${result == null}"
+               th:text="#{lab.tracker.no_result}">The lab has not entered the result yet.</p>
+
+            <th:block th:if="${result != null}">
+                <ul class="info-list">
+                    <li>
+                        <span class="label" th:text="#{lab.result.ph}">pH</span>
+                        <span th:text="${result.ph != null} ? ${result.ph} : '—'">7.2</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.n}">Nitrogen (N)</span>
+                        <span th:text="${result.nitrogen != null} ? ${result.nitrogen} : '—'">280</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.p}">Phosphorus (P)</span>
+                        <span th:text="${result.phosphorus != null} ? ${result.phosphorus} : '—'">22</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.k}">Potassium (K)</span>
+                        <span th:text="${result.potassium != null} ? ${result.potassium} : '—'">310</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.oc}">Organic carbon</span>
+                        <span th:text="${result.organicCarbon != null} ? ${result.organicCarbon} : '—'">0.6</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.ec}">Electrical conductivity</span>
+                        <span th:text="${result.electricalConductivity != null} ? ${result.electricalConductivity} : '—'">0.3</span>
+                    </li>
+                    <li th:if="${result.remarks != null}">
+                        <span class="label" th:text="#{lab.result.remarks}">Remarks</span>
+                        <span th:text="${result.remarks}">-</span>
+                    </li>
+                </ul>
+
+                <p style="margin-top:12px;">
+                    <a class="btn btn--primary" th:if="${reportReady}"
+                       th:href="@{/lab/request/{id}/report(id=${request.trackingId})}"
+                       th:text="#{lab.tracker.report}">Download report (PDF)</a>
+                    <span class="card__text" th:unless="${reportReady}"
+                          th:text="#{lab.tracker.report_wait}">The report can be downloaded once the lab marks it ready.</span>
+                </p>
+                <p class="card__text" th:if="${reportReady}"
+                   th:text="#{lab.report.collect_note}">Collect the printed report from the lab.</p>
+            </th:block>
+        </div>
+    </div>
+    <!-- TILE END: labreq-result -->
+
+</th:block>
+
+</body>
+</html>

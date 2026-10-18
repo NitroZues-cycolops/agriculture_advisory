@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 3 - the private-message inbox at /messages.
+  ROUTE   : GET /messages                         -> CommunityController.inbox
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a conversations tile (newest first).
+  DATA    : conversations (otherId, otherName, lastContent, lastAt, unread),
+            withPhoto, unreadCount (from UnreadBadgeAdvice)
+  NO JAVASCRIPT : every row is a link to the thread page; there is no live
+            update, so the thread (not the inbox) carries the Refresh link.
+  SOMETHING TO CHANGE: the inbox shows only people you have already exchanged
+            messages with. To start a new chat, follow a farmer on /farmers.
+  If this breaks, check:
+    - "No messages yet"     -> direct_messages has no rows for this user.
+    - a self-chat row       -> it cannot happen: sending to yourself is 403.
+    - Text as a missing key -> messages.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: messages-inbox | controller: CommunityController.inbox -->
+    <div class="tile tile--span" id="tile-messages-inbox">
+        <div class="tile__header">
+            <span class="tile__title"
+                  th:text="'[6] ' + #{messages.title}">[6] Messages</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{messages.title}">Messages</h1>
+                <p class="page-head__sub" th:text="#{farmers.intro}">Search for other farmers and follow them to start a conversation.</p>
+            </div>
+
+            <p>
+                <a class="btn btn--ghost" th:href="@{/farmers}"
+                   th:text="#{farmers.link}">Find farmers</a>
+                <a class="btn btn--ghost" th:href="@{/community}"
+                   th:text="#{community.back}">Back to community</a>
+            </p>
+
+            <p class="card__text" th:if="${#lists.isEmpty(conversations)}"
+               th:text="#{messages.inbox.empty}">No messages yet. Find a farmer to chat with.</p>
+
+            <div class="post" th:each="c : ${conversations}">
+                <div class="post__meta">
+                    <span th:replace="~{fragments/avatar :: avatar(${c.otherId}, ${c.otherName}, ${withPhoto.contains(c.otherId)})}"></span>
+                    <a th:href="@{/community/profile/{id}(id=${c.otherId})}"
+                       th:text="${c.otherName}">Farmer</a>
+                    <span th:if="${c.lastAt != null}"
+                          th:text="${#temporals.format(c.lastAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span class="tag tag--warn" th:if="${c.unread > 0}"
+                          th:text="#{messages.inbox.unread(${c.unread})}">1 unread</span>
+                </div>
+                <!-- A soft-deleted last message has blank text - show the same
+                     placeholder the thread does, never an empty line. -->
+                <p class="card__text" th:if="${#strings.isEmpty(c.lastContent)}"
+                   th:text="#{community.message.deleted}">This message was deleted.</p>
+                <p class="card__text" th:unless="${#strings.isEmpty(c.lastContent)}"
+                   th:text="${c.lastContent}">last message</p>
+                <a class="btn btn--ghost" th:href="@{/messages/{id}(id=${c.otherId})}"
+                   th:text="#{messages.inbox.open}">Open</a>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: messages-inbox -->
+
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Workspace 7 - the farmer's own profile (STEP 2). Two tiles:
+            read-only account info and the editable farm details.
+  ROUTE   : GET  /profile -> ProfileController.view
+            POST /profile -> ProfileController.save
+  ROLE    : authenticated; farmers edit here (lab -> /lab, owner -> /debug)
+  PART 2b : a "My posts" tile lists the farmer's OWN community posts with Edit
+            and Delete links that lead to the community confirm pages.
+  LAYOUT  : layout-home -> .tile--form tiles (620px), centred.
+  DATA    : profile       -> the FarmerProfile shown (filled from the DB, or
+                             the values just typed when validation failed)
+            errors        -> Map field -> already-translated error message
+            hasProfile    -> true when the account already has a DB row
+            districts, crops, soils, irrigations, units, langs
+            selectedCrops -> List<String> of ticked crop codes
+            param.saved   -> "?saved" in the URL shows the success banner
+  NO JAVASCRIPT
+            One hidden <form id="profileForm"> owns every input through the
+            HTML5 form="profileForm" attribute, so the page is a single POST
+            and the CSRF token (from th:action) is included.
+  If this breaks, check:
+    - "Invalid CSRF token" -> keep th:action on the <form>.
+    - Saved values not shown -> the input name does not match a
+      FarmerProfile setter name used in ProfileController.
+    - a missing key on screen -> profile.* / field.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 7)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <form id="profileForm" th:action="@{/profile}" method="post" style="display:none;"></form>
+
+    <!-- TILE START: profile-header | controller: ProfileController -->
+    <div class="tile tile--span" id="tile-profile-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{profile.title}">[7] My Profile</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{profile.title}">My Profile</h1>
+                <p class="page-head__sub" th:text="#{profile.intro}">Keep your farm and contact details up to date.</p>
+            </div>
+
+            <!-- PART 2a: the profile picture. The avatar is an <img> served by
+                 GET /avatar/{id} when a photo exists, otherwise the CSS initials
+                 circle. The upload/remove controls are SEPARATE forms (never
+                 nested inside #profileForm) and each carries its own CSRF token
+                 through th:action. -->
+            <div class="profile-photo">
+                <span th:replace="~{fragments/avatar :: avatar(${profile.userId}, ${profile.fullName}, ${hasPhoto})}"></span>
+                <div class="profile-photo__actions">
+                    <form th:action="@{/profile/photo}" method="post" enctype="multipart/form-data">
+                        <div class="form-row">
+                            <label for="pf-photo" th:text="#{profile.photo.label}">Profile picture</label>
+                            <input type="file" id="pf-photo" name="photo" accept="image/jpeg,image/png"
+                                   th:classappend="${errors['photo'] != null} ? ' is-invalid'">
+                            <span class="form-error" th:if="${errors['photo'] != null}"
+                                  th:text="${errors['photo']}">error</span>
+                            <span class="form-hint" th:text="#{profile.photo.hint}">JPG or PNG, up to 2 MB.</span>
+                        </div>
+                        <button type="submit" class="btn btn--primary"
+                                th:text="#{profile.photo.upload}">Save photo</button>
+                    </form>
+                    <form th:if="${hasPhoto}" th:action="@{/profile/photo/remove}" method="post">
+                        <button type="submit" class="btn btn--ghost"
+                                th:text="#{profile.photo.remove}">Remove photo</button>
+                    </form>
+                    <p class="form-hint" th:unless="${hasPhoto}"
+                       th:text="#{profile.photo.add}">Add a photo so other farmers recognise you.</p>
+                </div>
+            </div>
+
+            <div class="alert alert--success" th:if="${param.saved}"
+                 th:text="#{profile.saved}">Your profile has been saved.</div>
+            <div class="alert alert--success"
+                 th:if="${param.photo != null and param.photo[0] == 'saved'}"
+                 th:text="#{profile.photo.saved}">Your profile picture has been saved.</div>
+            <div class="alert alert--success"
+                 th:if="${param.photo != null and param.photo[0] == 'removed'}"
+                 th:text="#{profile.photo.removed}">Your profile picture has been removed.</div>
+            <div class="alert alert--warning" th:if="${!hasProfile}"
+                 th:text="#{profile.none}">You have not added your farm details yet.</div>
+        </div>
+    </div>
+    <!-- TILE END: profile-header -->
+
+    <!-- TILE START: profile-account | controller: ProfileController -->
+    <div class="tile tile--form" id="tile-profile-account" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{profile.tile.account}">[7] Account</span>
+        </div>
+        <div class="tile__body">
+
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{auth.username}">Username</span>
+                    <span th:text="${#authentication.name}">farmer1</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{auth.role}">Role</span>
+                    <span th:text="#{auth.farmer}">Farmer</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{field.email}">Email</span>
+                    <span th:if="${accountEmail != null and !accountEmail.isBlank()}"
+                          th:text="${accountEmail}">name@example.com</span>
+                    <span th:unless="${accountEmail != null and !accountEmail.isBlank()}"
+                          th:text="#{profile.email.none}">Not added</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{profile.email.status}">Email status</span>
+                    <span class="tag tag--ok" th:if="${emailVerified}"
+                          th:text="#{verify.email.verified}">Verified</span>
+                    <span class="tag tag--warn" th:unless="${emailVerified}"
+                          th:text="#{verify.email.notverified}">Not verified yet</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{profile.contact.notverified}">Contact number (not verified)</span>
+                    <span th:if="${accountContact != null and !accountContact.isBlank()}"
+                          th:text="${accountContact}">9876543210</span>
+                    <span th:unless="${accountContact != null and !accountContact.isBlank()}"
+                          th:text="#{profile.contact.none}">Not added</span>
+                </li>
+            </ul>
+            <p class="form-hint" th:text="#{profile.email.hint}">We only use your address for the verification link and lab reports.</p>
+
+            <!-- PART 2a: reuse the existing email-verification flow. The resend
+                 endpoint identifies the account by the one-time handle the
+                 controller created for this page (?h=...), never by a user id. -->
+            <form th:if="${verifyHandle != null}" th:action="@{/verify/email/resend}"
+                  method="post" style="margin-top:10px;">
+                <input type="hidden" name="h" th:value="${verifyHandle}">
+                <button type="submit" class="btn btn--ghost"
+                        th:text="#{verify.email.send}">Send the verification link</button>
+            </form>
+
+            <div class="form-row" style="margin-top:14px;">
+                <label for="pf-name" th:text="#{field.fullname}">Full name</label>
+                <input type="text" id="pf-name" name="fullName" form="profileForm" required
+                       th:value="${profile.fullName}"
+                       th:classappend="${errors['fullName'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['fullName'] != null}"
+                      th:text="${errors['fullName']}">error</span>
+            </div>
+
+            <div class="form-row">
+                <label for="pf-mobile" th:text="#{field.mobile}">Mobile number</label>
+                <input type="text" id="pf-mobile" name="mobile" form="profileForm"
+                       inputmode="numeric" maxlength="10"
+                       th:value="${profile.phone}"
+                       th:classappend="${errors['mobile'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['mobile'] != null}"
+                      th:text="${errors['mobile']}">error</span>
+            </div>
+
+            <div class="form-row">
+                <label th:text="#{field.language}">Preferred language</label>
+                <div class="check-grid">
+                    <label th:each="code : ${langs}">
+                        <input type="radio" name="lang" form="profileForm" th:value="${code}"
+                               th:checked="${profile.preferredLang == code}">
+                        <span th:text="${#messages.msg('lang.' + code)}">English</span>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <!-- TILE END: profile-account -->
+
+    <!-- TILE START: profile-farm | controller: ProfileController -->
+    <div class="tile tile--form" id="tile-profile-farm" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{profile.tile.farm}">[7] Farm details</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="form-row">
+                <label th:text="#{field.state}">State</label>
+                <input type="text" th:value="#{register.state}" readonly>
+                <input type="hidden" name="state" form="profileForm" value="Maharashtra">
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="pf-district" th:text="#{field.district}">District</label>
+                    <select id="pf-district" name="district" form="profileForm" required
+                            th:classappend="${errors['district'] != null} ? ' is-invalid'">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="d : ${districts}" th:value="${d.nameEn}"
+                                th:selected="${profile.district == d.nameEn}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                    <span class="form-error" th:if="${errors['district'] != null}"
+                          th:text="${errors['district']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="pf-taluka" th:text="#{field.taluka}">Taluka</label>
+                    <input type="text" id="pf-taluka" name="taluka" form="profileForm" required
+                           th:value="${profile.taluka}"
+                           th:classappend="${errors['taluka'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['taluka'] != null}"
+                          th:text="${errors['taluka']}">error</span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="pf-village" th:text="#{field.village}">Village</label>
+                <input type="text" id="pf-village" name="village" form="profileForm" required
+                       th:value="${profile.village}"
+                       th:classappend="${errors['village'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['village'] != null}"
+                      th:text="${errors['village']}">error</span>
+            </div>
+
+            <div class="form-row">
+                <label th:text="#{field.crops}">Crops grown</label>
+                <div class="check-grid">
+                    <label th:each="c : ${crops}">
+                        <input type="checkbox" name="crops" form="profileForm" th:value="${c}"
+                               th:checked="${selectedCrops.contains(c)}">
+                        <span th:text="${#messages.msg('crop.' + c)}">Rice</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="pf-area" th:text="#{field.area}">Farm area</label>
+                    <input type="number" id="pf-area" name="area" form="profileForm"
+                           step="0.01" min="0.01" required
+                           th:value="${profile.farmArea > 0 ? profile.farmArea : ''}"
+                           th:classappend="${errors['area'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['area'] != null}"
+                          th:text="${errors['area']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="pf-unit" th:text="#{field.unit}">Unit</label>
+                    <select id="pf-unit" name="unit" form="profileForm">
+                        <option th:each="u : ${units}" th:value="${u}"
+                                th:selected="${profile.unit == u}"
+                                th:text="${#messages.msg('unit.' + u)}">acre</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="pf-soil" th:text="#{field.soil}">Soil type</label>
+                    <select id="pf-soil" name="soil" form="profileForm">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="s : ${soils}" th:value="${s}"
+                                th:selected="${profile.soilType == s}"
+                                th:text="${#messages.msg('soil.' + s)}">Black</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="pf-irrigation" th:text="#{field.irrigation}">Irrigation</label>
+                    <select id="pf-irrigation" name="irrigation" form="profileForm">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="i : ${irrigations}" th:value="${i}"
+                                th:selected="${profile.irrigation == i}"
+                                th:text="${#messages.msg('irrigation.' + i)}">Drip</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="pf-description" th:text="#{field.description}">Short description</label>
+                <textarea id="pf-description" name="description" form="profileForm"
+                          th:text="${profile.description}"></textarea>
+            </div>
+
+            <p class="btn-row" style="margin-top:10px;">
+                <button type="submit" form="profileForm" class="btn btn--primary"
+                        th:text="#{profile.save}">Save profile</button>
+                <a class="btn" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+            </p>
+
+        </div>
+    </div>
+    <!-- TILE END: profile-farm -->
+
+    <!-- TILE START: profile-posts | controller: ProfileController | PART 2b -->
+    <div class="tile tile--span" id="tile-profile-posts">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{profile.my_posts}">[7] My posts</span>
+        </div>
+        <div class="tile__body">
+            <p class="form-hint" th:text="#{profile.my_posts.intro}">Everything you have shared in the community. You can edit or delete your own posts here.</p>
+
+            <p class="card__text" th:if="${#lists.isEmpty(myPosts)}"
+               th:text="#{profile.my_posts.empty}">You have not posted anything in the community yet.</p>
+
+            <div class="post" th:each="p : ${myPosts}">
+                <div class="post__meta">
+                    <span th:text="${#temporals.format(p.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span class="tag" th:text="#{community.post.comments(${p.commentCount})}">0 comments</span>
+                </div>
+                <p class="card__text" th:text="${p.content}">A post.</p>
+                <img class="post__image" th:if="${p.hasImage}"
+                     th:src="@{/community/image/{id}(id=${p.id})}"
+                     th:alt="#{community.image.alt}">
+                <p class="btn-row" style="margin-top:8px;">
+                    <a class="btn btn--ghost" th:href="@{/community/post/{id}/edit(id=${p.id})}"
+                       th:text="#{community.edit}">Edit</a>
+                    <a class="btn btn--danger" th:href="@{/community/post/{id}/delete(id=${p.id})}"
+                       th:text="#{community.delete}">Delete</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: profile-posts -->
+
+</th:block>
+
+</body>
+</html>

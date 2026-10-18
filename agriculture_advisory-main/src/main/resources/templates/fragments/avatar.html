@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 2a - ONE reusable avatar for every place a farmer's name is
+            shown (own profile, community posts, comments, the member list,
+            a farmer's community profile and every chat message).
+  USAGE   : <span th:replace="~{fragments/avatar :: avatar(${userId}, ${name}, ${hasPhoto})}"></span>
+              hasPhoto = true  -> the stored picture, served by GET /avatar/{userId}
+                                  (a controller, because the file lives OUTSIDE static)
+              hasPhoto = false -> a CSS initials circle, drawn from the shared
+                                  Initials bean (colour + letters). No JavaScript.
+  NO JAVASCRIPT.
+  If this breaks, check:
+    - a blank/unknown name -> still renders "?" (Initials never throws).
+    - "??" on screen       -> avatar.alt in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<span th:fragment="avatar(id, name, hasPhoto)" class="avatar-slot">
+    <img th:if="${hasPhoto}" class="avatar" th:src="@{/avatar/{id}(id=${id})}"
+         th:alt="#{avatar.alt}">
+    <span th:unless="${hasPhoto}" class="avatar avatar--initials"
+          th:style="|background-color: ${@initials.colorFor(name)}|"
+          th:text="${@initials.of(name)}"
+          th:title="${name}">R</span>
+</span>
+
+</body>
+</html>

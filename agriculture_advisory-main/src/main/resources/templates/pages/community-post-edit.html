@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 2b - edit one of YOUR OWN community posts.
+  ROUTE   : GET  /community/post/{id}/edit -> CommunityController.editPostForm
+            POST /community/post/{id}/edit -> CommunityController.editPost
+  ROLE    : the post's author (or an OWNER); anyone else -> 403
+  LAYOUT  : layout-home -> one form tile.
+  DATA    : post, form (echoed content), errors, withPhoto, unread
+  NO JAVASCRIPT : a plain multipart POST form. The "remove the current photo"
+            control is a checkbox, so it is sent only when it is ticked.
+  If this breaks, check:
+    - 403 -> the post belongs to someone else and the account is not an OWNER.
+    - "Invalid CSRF token" -> keep th:action on the <form>.
+    - Text as a missing key -> community.edit.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commpost-edit | controller: CommunityController.editPostForm -->
+    <div class="tile tile--form" id="tile-commpost-edit" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.edit.title}">[6] Edit your post</span>
+        </div>
+        <div class="tile__body">
+
+            <a class="card__btn" th:href="@{/community/post/{id}(id=${post.id})}"
+               th:text="#{community.back}">Back to the post</a>
+
+            <form th:action="@{/community/post/{id}/edit(id=${post.id})}" method="post"
+                  enctype="multipart/form-data" style="margin-top:12px;">
+
+                <div class="form-row">
+                    <label for="content" th:text="#{community.new.content}">Your message</label>
+                    <textarea id="content" name="content" maxlength="1000" required
+                              th:classappend="${errors['content'] != null} ? ' is-invalid'"
+                              th:text="${form['content']}"></textarea>
+                    <span class="form-error" th:if="${errors['content'] != null}"
+                          th:text="${errors['content']}">error</span>
+                </div>
+
+                <!-- The CURRENT photo, if any, and how to keep / replace / remove it. -->
+                <div class="form-row" th:if="${post.hasImage}">
+                    <label th:text="#{community.edit.current}">Current photo</label>
+                    <img class="post__image" th:src="@{/community/image/{id}(id=${post.id})}"
+                         th:alt="#{community.image.alt}">
+                    <label>
+                        <input type="checkbox" name="removeImage" value="yes">
+                        <span th:text="#{community.edit.remove}">Remove the current photo</span>
+                    </label>
+                </div>
+
+                <div class="form-row">
+                    <label for="image" th:text="#{community.edit.replace}">Replace the photo (optional)</label>
+                    <input type="file" id="image" name="image" accept="image/jpeg,image/png"
+                           th:classappend="${errors['image'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['image'] != null}"
+                          th:text="${errors['image']}">error</span>
+                    <span class="form-hint" th:text="#{community.new.image.hint}">JPG or PNG, up to 2 MB.</span>
+                </div>
+
+                <p class="btn-row" style="margin-top:10px;">
+                    <button class="btn btn--primary" type="submit"
+                            th:text="#{community.edit.submit}">Save changes</button>
+                    <a class="btn" th:href="@{/community/post/{id}(id=${post.id})}"
+                       th:text="#{common.cancel}">Cancel</a>
+                </p>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: commpost-edit -->
+
+</th:block>
+
+</body>
+</html>

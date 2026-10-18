@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Login page.
+  ROUTE   : GET  /login   (MainController.login)
+            POST /login   (Spring Security formLogin, see SecurityConfig)
+  LAYOUT  : layout-center -> one centred tile (~420px) with the form and a
+            smaller content-sized "About this app" tile underneath.
+  DATA    : reads ?error (bad credentials) and ?logout (just logged out).
+  If this breaks, check:
+    - "Invalid username or password" missing -> the URL must contain ?error
+      (Spring Security adds it) and the auth.login.error key must exist.
+    - Login always fails -> the field names below MUST stay "username" and
+      "password" (Spring Security defaults); demo users come from sample_data.
+    - Page looks like one small tile -> this file must keep
+      <th:block th:fragment="content"> (not a <div>).
+    - Text shows as a missing key -> auth.* / about.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-center', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: login-form | controller: MainController.login -->
+    <div class="tile" id="tile-login-form" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{auth.login}">[1] Login</span>
+        </div>
+        <div class="tile__body">
+
+            <!-- Friendly messages instead of a blank page -->
+            <div class="alert alert--severe" th:if="${param.error}">
+                <span aria-hidden="true">⚠️</span>
+                <span th:text="#{auth.login.error}">Invalid username or password.</span>
+            </div>
+            <div class="alert alert--success" th:if="${param.logout}">
+                <span aria-hidden="true">✅</span>
+                <span th:text="#{auth.login.logged_out}">You have been logged out.</span>
+            </div>
+            <div class="alert alert--success" th:if="${param.registered}">
+                <span aria-hidden="true">✅</span>
+                <span th:text="#{auth.login.registered}">Registration successful. Please log in.</span>
+            </div>
+
+            <!-- PART 1: the account exists but its email is not verified yet, so
+                 Spring Security disabled it. Explain why. -->
+            <div class="alert alert--severe" th:if="${param.disabled}">
+                <span aria-hidden="true">⚠️</span>
+                <span th:text="#{auth.login.disabled}">Your account is not verified yet. Please verify your email address.</span>
+            </div>
+
+            <!-- th:action keeps the Spring Security CSRF token in the form -->
+            <form th:action="@{/login}" method="post">
+                <div class="form-row">
+                    <label for="login-username" th:text="#{auth.username}">Username</label>
+                    <input type="text" id="login-username" name="username" required autofocus>
+                </div>
+                <div class="form-row">
+                    <label for="login-password" th:text="#{auth.password}">Password</label>
+                    <input type="password" id="login-password" name="password" required>
+                </div>
+                <button type="submit" class="btn btn--primary btn--block"
+                        th:text="#{auth.login}">Login</button>
+            </form>
+
+            <p class="auth-alt">
+                <span th:text="#{auth.login.no_account}">Don't have an account?</span>
+                <a th:href="@{/register}" th:text="#{auth.signup}">Sign Up</a>
+            </p>
+
+        </div>
+    </div>
+    <!-- TILE END: login-form -->
+
+    <!-- TILE START: login-about | static about text -->
+    <div class="tile" id="tile-login-about" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{about.title}">[2] About this app</span>
+        </div>
+        <div class="tile__body">
+            <p th:text="#{about.body}">This service helps the farmers of Maharashtra...</p>
+            <p class="form-hint" th:text="#{help.demo}">Demo logins...</p>
+        </div>
+    </div>
+    <!-- TILE END: login-about -->
+
+</th:block>
+
+</body>
+</html>

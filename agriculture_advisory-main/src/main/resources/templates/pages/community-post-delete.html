@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 2b - the CONFIRM page shown before a post is deleted.
+  ROUTE   : GET  /community/post/{id}/delete -> CommunityController.deletePostForm
+            POST /community/post/{id}/delete -> CommunityController.deletePost
+  ROLE    : the post's author (or an OWNER); anyone else -> 403
+  LAYOUT  : layout-home -> one confirmation tile.
+  DATA    : post, unread
+  WHY A PAGE: a GET never deletes anything. This page only SHOWS what will be
+            removed; the "Yes, delete" button is the POST that does it. The
+            "Cancel" control is a plain link back to the post.
+  If this breaks, check:
+    - 403 -> the post belongs to someone else and the account is not an OWNER.
+    - "Invalid CSRF token" -> keep th:action on the <form>.
+    - Text as a missing key -> community.post.delete.* keys in all four files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commpost-delete | controller: CommunityController.deletePostForm -->
+    <div class="tile tile--form" id="tile-commpost-delete" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.post.delete.title}">[6] Delete this post?</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:text="#{community.post.delete.body}">This post, all its comments and its votes will be removed for everyone. This cannot be undone.</p>
+            <p class="form-hint" th:if="${post.hasImage}"
+               th:text="#{community.post.delete.note}">The photo attached to this post is deleted too.</p>
+
+            <!-- WHAT will be deleted: the post itself. -->
+            <div class="post" style="margin-top:12px;">
+                <div class="post__meta">
+                    <span th:text="${post.authorName}">Farmer</span>
+                    <span th:text="${#temporals.format(post.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span class="tag" th:text="#{community.post.comments(${post.commentCount})}">0 comments</span>
+                </div>
+                <p class="card__text" th:text="${post.content}">A post.</p>
+                <img class="post__image" th:if="${post.hasImage}"
+                     th:src="@{/community/image/{id}(id=${post.id})}"
+                     th:alt="#{community.image.alt}">
+            </div>
+
+            <p class="btn-row" style="margin-top:14px;">
+                <form th:action="@{/community/post/{id}/delete(id=${post.id})}" method="post"
+                      style="display:inline;">
+                    <button type="submit" class="btn btn--danger"
+                            th:text="#{community.delete.confirm}">Yes, delete</button>
+                </form>
+                <a class="btn" th:href="@{/community/post/{id}(id=${post.id})}"
+                   th:text="#{common.cancel}">Cancel</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: commpost-delete -->
+
+</th:block>
+
+</body>
+</html>

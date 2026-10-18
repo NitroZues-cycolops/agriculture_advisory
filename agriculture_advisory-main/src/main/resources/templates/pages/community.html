@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Community feed (workspace 6) - STEP 6. A new-post form, the
+            list of recent posts and the farmer directory.
+  ROUTE   : GET  /community        -> CommunityController.feed
+            POST /community/post   -> CommunityController.createPost
+            POST /community/post/{id}/vote   -> CommunityController.vote
+            GET  /community/post/{id}/edit   -> CommunityController.editPostForm (author/owner)
+            GET  /community/post/{id}/delete -> CommunityController.deletePostForm (author/owner)
+            POST /community/post/{id}/delete -> CommunityController.deletePost (author/owner)
+            POST /community/follow/{id} / /community/unfollow/{id}
+  ROLE    : any authenticated user (the author and the owner get Edit/Delete,
+            which link to the confirm pages - a GET never deletes)
+  LAYOUT  : layout-home -> full-width header + form, a full-width feed tile
+            and a full-width farmer directory.
+  DATA    : posts, members, following, me, role, unread, form, errors
+  NO JAVASCRIPT : the post form is a multipart POST, the vote buttons are small
+            POST forms, follow/unfollow are POST forms, comments are links.
+  If this breaks, check:
+    - "Invalid CSRF token" on the post form -> keep th:action on the <form>.
+    - A photo does not show -> image_path in community_posts, the file under
+      <uploads>/community/, and GET /community/image/{id}.
+    - Text as a missing key -> community.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: comm-header | controller: CommunityController.feed | full-width -->
+    <div class="tile tile--span" id="tile-comm-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{nav.community}">[6] Community</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{community.title}">Community</h1>
+                <p class="page-head__sub" th:text="#{community.intro}">Share updates with other farmers.</p>
+            </div>
+
+            <p>
+                <a class="btn btn--ghost" th:href="@{/community/messages}"
+                   th:text="#{community.inbox}">Inbox</a>
+                <span class="tag tag--warn" th:if="${unread > 0}"
+                      th:text="#{community.inbox.unread(${unread})}">3 unread</span>
+            </p>
+
+            <!-- New post: text + an optional photo (JPG/PNG, up to 2 MB). -->
+            <form th:action="@{/community/post}" method="post" enctype="multipart/form-data"
+                  style="margin-top:12px;">
+                <div class="form-row">
+                    <label for="content" th:text="#{community.new.content}">Your message</label>
+                    <textarea id="content" name="content" maxlength="1000" required
+                              th:classappend="${errors['content'] != null} ? ' is-invalid'"
+                              th:text="${form['content']}"></textarea>
+                    <span class="form-error" th:if="${errors['content'] != null}"
+                          th:text="${errors['content']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="image" th:text="#{community.new.image}">Photo (optional)</label>
+                    <input type="file" id="image" name="image" accept="image/jpeg,image/png"
+                           th:classappend="${errors['image'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['image'] != null}"
+                          th:text="${errors['image']}">error</span>
+                    <span class="form-hint" th:text="#{community.new.image.hint}">JPG or PNG, up to 2 MB.</span>
+                </div>
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{community.new.submit}">Post</button>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: comm-header -->
+
+    <!-- TILE START: comm-feed | controller: CommunityController.feed | full-width -->
+    <div class="tile tile--span" id="tile-comm-feed">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.tile.feed}">[6] Recent posts</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(posts)}"
+               th:text="#{community.empty}">No posts yet.</p>
+
+            <div class="post" th:each="p : ${posts}">
+                <div class="post__meta">
+                    <span th:replace="~{fragments/avatar :: avatar(${p.userId}, ${p.authorName}, ${withPhoto.contains(p.userId)})}"></span>
+                    <a th:href="@{/community/profile/{id}(id=${p.userId})}"
+                       th:text="${p.authorName}">Farmer</a>
+                    <span th:if="${p.authorDistrict != null}" th:text="${p.authorDistrict}">Pune</span>
+                    <span th:text="${#temporals.format(p.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+
+                <p class="card__text" th:text="${p.content}">A post.</p>
+                <img class="post__image" th:if="${p.hasImage}"
+                     th:src="@{/community/image/{id}(id=${p.id})}"
+                     th:alt="#{community.image.alt}">
+
+                <div class="post__meta" style="margin-top:8px; align-items:center;">
+                    <!-- One vote per user: the unique key (post_id, user_id) makes
+                         a second click replace the first vote. -->
+                    <form class="vote-form" th:action="@{/community/post/{id}/vote(id=${p.id})}" method="post">
+                        <input type="hidden" name="vote" value="UP">
+                        <button type="submit" class="btn btn--ghost"
+                                th:classappend="${p.myVote == 'UP'} ? ' btn--primary'"
+                                th:text="${'▲ ' + p.upVotes}">▲ 0</button>
+                    </form>
+                    <form class="vote-form" th:action="@{/community/post/{id}/vote(id=${p.id})}" method="post">
+                        <input type="hidden" name="vote" value="DOWN">
+                        <button type="submit" class="btn btn--ghost"
+                                th:classappend="${p.myVote == 'DOWN'} ? ' btn--primary'"
+                                th:text="${'▼ ' + p.downVotes}">▼ 0</button>
+                    </form>
+                    <span class="tag" th:text="#{community.post.score(${p.score})}">0</span>
+                    <a th:href="@{/community/post/{id}(id=${p.id})}"
+                       th:text="#{community.post.comments(${p.commentCount})}">0 comments</a>
+
+                    <!-- PART 2b: the author (or an OWNER moderating) edits or deletes
+                         through their own confirm pages - a GET never deletes. -->
+                    <a class="btn btn--ghost" th:if="${p.userId == me or role == 'OWNER'}"
+                       th:href="@{/community/post/{id}/edit(id=${p.id})}"
+                       th:text="#{community.edit}">Edit</a>
+                    <a class="btn btn--danger" th:if="${p.userId == me or role == 'OWNER'}"
+                       th:href="@{/community/post/{id}/delete(id=${p.id})}"
+                       th:text="#{community.delete}">Delete</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: comm-feed -->
+
+    <!-- TILE START: comm-members | controller: CommunityController.feed | full-width -->
+    <div class="tile tile--span" id="tile-comm-members">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.tile.members}">[6] Farmers</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(members)}"
+               th:text="#{community.members.none}">No farmer profiles yet.</p>
+
+            <div class="lab-grid" th:unless="${#lists.isEmpty(members)}">
+                <div class="lab-card" th:each="m : ${members}">
+                    <div class="with-avatar">
+                        <span th:replace="~{fragments/avatar :: avatar(${m.userId}, ${m.displayName()}, ${withPhoto.contains(m.userId)})}"></span>
+                        <div class="lab-card__name">
+                            <a th:href="@{/community/profile/{id}(id=${m.userId})}"
+                               th:text="${m.displayName()}">Farmer</a>
+                        </div>
+                    </div>
+                    <ul class="info-list">
+                        <li th:if="${m.district != null}">
+                            <span class="label" th:text="#{community.profile.district}">District</span>
+                            <span>
+                                <span th:text="${m.district}">Pune</span>
+                                <span th:if="${m.village != null}" th:text="${' / ' + m.village}"> / Wagholi</span>
+                            </span>
+                        </li>
+                    </ul>
+                    <div class="btn-row" th:if="${m.userId != me}" style="margin-top:8px;">
+                        <form th:if="${!following.contains(m.userId)}"
+                              th:action="@{/community/follow/{id}(id=${m.userId})}" method="post">
+                            <input type="hidden" name="back" value="/community">
+                            <button type="submit" class="btn btn--ghost"
+                                    th:text="#{community.follow}">Follow</button>
+                        </form>
+                        <form th:if="${following.contains(m.userId)}"
+                              th:action="@{/community/unfollow/{id}(id=${m.userId})}" method="post">
+                            <input type="hidden" name="back" value="/community">
+                            <button type="submit" class="btn btn--ghost"
+                                    th:text="#{community.unfollow}">Unfollow</button>
+                        </form>
+                        <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${m.userId})}"
+                           th:text="#{community.message}">Message</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: comm-members -->
+
+</th:block>
+
+</body>
+</html>

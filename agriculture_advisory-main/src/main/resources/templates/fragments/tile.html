@@ -1,0 +1,33 @@
+<!--
+  =====================================================================
+  PURPOSE : Reusable tile shell = rounded border + small title bar
+            ("[2] Forecast") + its own scrolling body. Optional helper:
+            pages may copy the markup instead, which is what the current
+            pages do so that every tile stays easy to find in the inspector.
+  USED BY : any page that wants a tile without repeating the markup.
+  DATA    : tile(tileId, tileTitle, tileNumber, tileContent)
+              tileId      = unique HTML id, e.g. 'lab-tracker'
+              tileTitle   = already-translated title text, e.g. #    {nav.lab}
+              tileNumber  = the number shown in the title bar, e.g. 4
+              tileContent = a fragment expression with the tile body, e.g.
+                            ~{::labTrackerBody} defined in the calling page
+  USAGE   : <div th:replace="~{fragments/tile :: tile('lab-tracker', ~{::t}, 4, ~{::b})}"></div>
+  If this breaks, check:
+    - Body is empty -> the 4th argument was not passed, so tileContent is null.
+    - Tile does not glow -> style.css section 4 (.tile:hover / :focus-within)
+      and make sure tabindex="0" is still on the .tile div.
+  =====================================================================
+-->
+<div th:fragment="tile(tileId, tileTitle, tileNumber, tileContent)"
+     class="tile" th:id="${tileId}" tabindex="0">
+
+    <!-- TILE START: ${tileId} | fragment: fragments/tile :: tile -->
+    <div class="tile__header">
+        <span class="tile__title" th:text="${'[' + tileNumber + '] ' + tileTitle}">[1] Title</span>
+    </div>
+    <div class="tile__body">
+        <th:block th:insert="${tileContent}"></th:block>
+    </div>
+    <!-- TILE END: ${tileId} -->
+
+</div>

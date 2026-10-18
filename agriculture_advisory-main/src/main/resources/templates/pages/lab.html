@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : The farmer's lab workspace (workspace 4) - STEP 5. One page
+            holds three things: the test-request form, the farmer's own
+            requests with a CSS tracker, and "labs near me".
+  ROUTE   : GET  /lab            -> LabController.page
+            POST /lab/request     -> LabController.create
+  ROLE    : FARMER (a LAB account is redirected to /lab/dashboard)
+  LAYOUT  : layout-home -> full-width header, a 620px form tile, a table
+            tile and the full-width tracker / near-me tiles.
+  DATA    : role, hasProfile, districtName, districtFiltered, labs,
+            samples, crops, districts, myRequests, track, trackHistory,
+            trackResult, trackReportReady, form, errors
+  NO JAVASCRIPT : the district filter and the "find my request" box are
+            normal GET forms; the tracker is styled CSS; the map is a plain
+            <iframe> to openstreetmap.org.
+  If this breaks, check:
+    - No lab in the dropdown -> no APPROVED row in `labs` for your district
+      (run data_new.sql, or approve one on the owner panel in STEP 7).
+    - "Invalid CSRF token" -> keep th:action on the <form>.
+    - Tracking id not found -> the id is case sensitive (TRK-1001).
+    - Text as a missing key -> lab.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 4)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: lab-header | controller: LabController.page | full-width -->
+    <div class="tile tile--span" id="tile-lab-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{nav.lab}">[4] Lab</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{lab.title}">Soil and water testing</h1>
+                <p class="page-head__sub" th:text="#{lab.intro}">Send a sample to an approved lab and follow it here.</p>
+            </div>
+
+            <!-- The just-created request: show the tracking id to write down. -->
+            <div class="alert alert--success" th:if="${param.created}">
+                <span aria-hidden="true">✅</span>
+                <span>
+                    <strong th:text="#{lab.request.created}">Your request was created.</strong>
+                    <span th:if="${param.created}" th:text="${param.created[0]}">TRK-1004</span>
+                </span>
+            </div>
+
+            <div class="alert alert--warning" th:unless="${hasProfile}"
+                 th:text="#{lab.no_profile}">Save your district in your profile so we can show labs near you.</div>
+
+            <!-- Find one request by its tracking id. A plain GET form. -->
+            <form th:action="@{/lab}" method="get" style="margin-top:12px;">
+                <div class="form-grid">
+                    <div class="form-row">
+                        <label for="track" th:text="#{lab.track.label}">Tracking ID</label>
+                        <input type="text" id="track" name="track" placeholder="TRK-1001">
+                    </div>
+                    <div class="form-row" style="align-self:end;">
+                        <button class="btn btn--ghost" type="submit"
+                                th:text="#{lab.track.find}">Find my request</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: lab-header -->
+
+    <!-- TILE START: lab-request | controller: LabController.create -->
+    <div class="tile tile--form" id="tile-lab-request" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.tile.request}">[4] Request a test</span>
+        </div>
+        <div class="tile__body">
+
+            <!-- No approved lab at all: explain instead of showing an empty form. -->
+            <th:block th:if="${#lists.isEmpty(labs)}">
+                <p class="card__text" th:text="#{lab.request.no_labs}">No approved lab is listed yet.</p>
+            </th:block>
+
+            <form th:unless="${#lists.isEmpty(labs)}" th:action="@{/lab/request}" method="post">
+
+                <div class="form-row">
+                    <label for="labId" th:text="#{lab.form.lab}">Choose a lab</label>
+                    <select id="labId" name="labId" required
+                            th:classappend="${errors['labId'] != null} ? ' is-invalid'">
+                        <option value="" th:text="#{lab.form.choose}">-- choose --</option>
+                        <option th:each="l : ${labs}" th:value="${l.id}"
+                                th:selected="${form['labId'] != null and form['labId'] == l.id}"
+                                th:text="${l.name + ' - ' + l.district}">Lab</option>
+                    </select>
+                    <span class="form-error" th:if="${errors['labId'] != null}"
+                          th:text="${errors['labId']}">error</span>
+                    <span class="form-hint" th:text="#{lab.form.lab_hint}">Only approved labs are listed.</span>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-row">
+                        <label for="sampleType" th:text="#{lab.form.sample}">Sample type</label>
+                        <select id="sampleType" name="sampleType" required
+                                th:classappend="${errors['sampleType'] != null} ? ' is-invalid'">
+                            <option value="" th:text="#{lab.form.choose}">-- choose --</option>
+                            <option th:each="s : ${samples}" th:value="${s}"
+                                    th:selected="${form['sampleType'] == s}"
+                                    th:text="${#messages.msg('sample.' + s)}">Soil</option>
+                        </select>
+                        <span class="form-error" th:if="${errors['sampleType'] != null}"
+                              th:text="${errors['sampleType']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label for="crop" th:text="#{lab.form.crop}">Crop (optional)</label>
+                        <select id="crop" name="crop">
+                            <option value="" th:text="#{lab.form.choose}">-- choose --</option>
+                            <option th:each="c : ${crops}" th:value="${c}"
+                                    th:selected="${form['crop'] == c}"
+                                    th:text="${#messages.msg('crop.' + c)}">Rice</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label for="notes" th:text="#{lab.form.notes}">Notes for the lab</label>
+                    <textarea id="notes" name="notes" maxlength="500"
+                              th:classappend="${errors['notes'] != null} ? ' is-invalid'"
+                              th:text="${form['notes']}"></textarea>
+                    <span class="form-error" th:if="${errors['notes'] != null}"
+                          th:text="${errors['notes']}">error</span>
+                    <span class="form-hint" th:text="#{lab.form.notes.hint}">Any detail the lab should know (up to 500 characters).</span>
+                </div>
+
+                <button class="btn btn--primary btn--block" type="submit"
+                        th:text="#{lab.form.submit}">Send request</button>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: lab-request -->
+
+    <!-- TILE START: lab-mine | controller: LabController.page -->
+    <div class="tile tile--form" id="tile-lab-mine" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.mine.title}">[4] My test requests</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(myRequests)}"
+               th:text="#{lab.mine.none}">You have not sent a test request yet.</p>
+
+            <div class="table-wrap" th:unless="${#lists.isEmpty(myRequests)}">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{lab.tracking}">Tracking ID</th>
+                        <th th:text="#{lab.field.lab}">Lab</th>
+                        <th th:text="#{lab.form.sample}">Sample</th>
+                        <th th:text="#{lab.field.status}">Status</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${myRequests}">
+                        <td th:text="${r.trackingId}">TRK-1001</td>
+                        <td th:text="${r.labName}">Lab</td>
+                        <td th:text="${#messages.msg('sample.' + #strings.toLowerCase(r.sampleType))}">Soil</td>
+                        <td>
+                            <span class="tag"
+                                  th:classappend="${r.stage().name() == 'REPORT_READY' or r.stage().name() == 'REPORT_COLLECTED'} ? ' tag--ok'"
+                                  th:text="${#messages.msg(r.stage().messageKey())}">Request Submitted</span>
+                        </td>
+                        <td>
+                            <a class="btn btn--ghost"
+                               th:href="@{/lab/request/{id}(id=${r.trackingId})}"
+                               th:text="#{lab.mine.track}">Track</a>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: lab-mine -->
+
+    <!-- TILE START: lab-tracker | controller: LabController.page | full-width -->
+    <div class="tile tile--span" id="tile-lab-tracker" th:if="${track != null}">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.tracker.title}">[4] Sample tracker</span>
+        </div>
+        <div class="tile__body">
+
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{lab.tracking}">Tracking ID</span>
+                    <span th:text="${track.trackingId}">TRK-1001</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.lab}">Lab</span>
+                    <span th:text="${track.labName}">Lab</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.form.sample}">Sample</span>
+                    <span th:text="${#messages.msg('sample.' + #strings.toLowerCase(track.sampleType))}">Soil</span>
+                </li>
+                <li th:if="${track.crop != null}">
+                    <span class="label" th:text="#{lab.form.crop}">Crop</span>
+                    <span th:text="${#messages.msg('crop.' + #strings.toLowerCase(track.crop))}">Rice</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.created}">Requested on</span>
+                    <span th:text="${#temporals.format(track.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </li>
+            </ul>
+
+            <!-- CSS-only tracker: one box per stage, filled up to the current one. -->
+            <ol class="stepper">
+                <li class="stepper__step" th:each="stage : ${track.stages()}"
+                    th:classappend="${stage.isDoneAt(track.stage())} ? ' stepper__step--done'"
+                    th:text="${#messages.msg(stage.messageKey())}">Request Submitted</li>
+            </ol>
+
+            <h2 class="card__title" style="margin-top:16px;" th:text="#{lab.tracker.history}">Status history</h2>
+            <ul class="info-list" th:unless="${#lists.isEmpty(trackHistory)}">
+                <li th:each="e : ${trackHistory}">
+                    <span class="label" th:text="${#temporals.format(e.changedAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span>
+                        <span th:text="${#messages.msg(e.messageKey())}">Request Submitted</span>
+                        <span th:if="${e.note != null}" th:text="${' - ' + e.note}"> - note</span>
+                    </span>
+                </li>
+            </ul>
+            <p class="card__text" th:if="${#lists.isEmpty(trackHistory)}"
+               th:text="#{lab.tracker.no_history}">No status change recorded yet.</p>
+
+            <h2 class="card__title" style="margin-top:16px;" th:text="#{lab.tracker.result}">Test result</h2>
+
+            <p class="card__text" th:if="${trackResult == null}"
+               th:text="#{lab.tracker.no_result}">The lab has not entered the result yet.</p>
+
+            <th:block th:if="${trackResult != null}">
+                <ul class="info-list">
+                    <li>
+                        <span class="label" th:text="#{lab.result.ph}">pH</span>
+                        <span th:text="${trackResult.ph != null} ? ${trackResult.ph} : '—'">7.2</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.n}">Nitrogen (N)</span>
+                        <span th:text="${trackResult.nitrogen != null} ? ${trackResult.nitrogen} : '—'">280</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.p}">Phosphorus (P)</span>
+                        <span th:text="${trackResult.phosphorus != null} ? ${trackResult.phosphorus} : '—'">22</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.k}">Potassium (K)</span>
+                        <span th:text="${trackResult.potassium != null} ? ${trackResult.potassium} : '—'">310</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.oc}">Organic carbon</span>
+                        <span th:text="${trackResult.organicCarbon != null} ? ${trackResult.organicCarbon} : '—'">0.6</span>
+                    </li>
+                    <li>
+                        <span class="label" th:text="#{lab.result.ec}">Electrical conductivity</span>
+                        <span th:text="${trackResult.electricalConductivity != null} ? ${trackResult.electricalConductivity} : '—'">0.3</span>
+                    </li>
+                    <li th:if="${trackResult.remarks != null}">
+                        <span class="label" th:text="#{lab.result.remarks}">Remarks</span>
+                        <span th:text="${trackResult.remarks}">-</span>
+                    </li>
+                </ul>
+
+                <p style="margin-top:12px;">
+                    <a class="btn btn--primary"
+                       th:if="${trackReportReady}"
+                       th:href="@{/lab/request/{id}/report(id=${track.trackingId})}"
+                       th:text="#{lab.tracker.report}">Download report (PDF)</a>
+                    <span class="card__text" th:unless="${trackReportReady}"
+                          th:text="#{lab.tracker.report_wait}">The report can be downloaded once the lab marks it ready.</span>
+                </p>
+                <p class="card__text" th:if="${trackReportReady}"
+                   th:text="#{lab.report.collect_note}">Collect the printed report from the lab.</p>
+            </th:block>
+        </div>
+    </div>
+    <!-- TILE END: lab-tracker -->
+
+    <!-- TILE START: lab-near | controller: LabController.page | full-width -->
+    <div class="tile tile--span" id="tile-lab-near">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.near.title}">[4] Labs near me</span>
+        </div>
+        <div class="tile__body">
+
+            <!-- District filter: a normal GET form, so the choice stays in the URL. -->
+            <form th:action="@{/lab}" method="get">
+                <div class="form-grid">
+                    <div class="form-row">
+                        <label for="district" th:text="#{lab.near.pick_district}">Choose a district</label>
+                        <select id="district" name="district">
+                            <option th:each="d : ${districts}" th:value="${d.nameEn}"
+                                    th:selected="${districtName != null and districtName == d.nameEn}"
+                                    th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                        </select>
+                    </div>
+                    <div class="form-row" style="align-self:end;">
+                        <button class="btn btn--ghost" type="submit"
+                                th:text="#{lab.near.filter}">Show labs</button>
+                    </div>
+                </div>
+            </form>
+
+            <p class="card__text" th:if="${districtFiltered}"
+               th:text="${#messages.msg('lab.near.district') + ': ' + districtName}">Showing labs in Raigad</p>
+            <p class="card__text" th:unless="${districtFiltered}"
+               th:text="#{lab.near.all}">Showing every approved lab.</p>
+
+            <p class="sample-note" th:text="#{lab.near.sample_note}">SAMPLE - lab details are seeded demo data.</p>
+
+            <p class="card__text" th:if="${#lists.isEmpty(labs)}"
+               th:text="#{lab.near.none}">No approved lab is listed for this district yet.</p>
+
+            <div class="lab-grid" th:unless="${#lists.isEmpty(labs)}">
+                <div class="lab-card" th:each="l : ${labs}">
+                    <div class="lab-card__name" th:text="${l.name}">Lab</div>
+                    <ul class="info-list">
+                        <li th:if="${l.district != null}">
+                            <span class="label" th:text="#{lab.field.district}">District</span>
+                            <span>
+                                <span th:text="${l.district}">Raigad</span>
+                                <span th:if="${l.taluka != null}" th:text="${' / ' + l.taluka}"> / Panvel</span>
+                            </span>
+                        </li>
+                        <li th:if="${l.address != null}">
+                            <span class="label" th:text="#{lab.near.address}">Address</span>
+                            <span th:text="${l.address}">address</span>
+                        </li>
+                        <li th:if="${l.phone != null}">
+                            <span class="label" th:text="#{lab.near.phone}">Phone</span>
+                            <span th:text="${l.phone}">-</span>
+                        </li>
+                        <li th:if="${l.timings != null}">
+                            <span class="label" th:text="#{lab.near.timings}">Timings</span>
+                            <span th:text="${l.timings}">-</span>
+                        </li>
+                        <li th:if="${l.sampleTypes != null}">
+                            <span class="label" th:text="#{lab.near.samples}">Samples accepted</span>
+                            <span>
+                                <span class="tag" th:each="s : ${#strings.arraySplit(l.sampleTypes, ',')}"
+                                      th:text="${#messages.msg('sample.' + #strings.toLowerCase(#strings.trim(s)))}">Soil</span>
+                            </span>
+                        </li>
+                        <li th:if="${l.requirements != null}">
+                            <span class="label" th:text="#{lab.near.requirements}">Requirements</span>
+                            <span th:text="${l.requirements}">-</span>
+                        </li>
+                    </ul>
+
+                    <!-- OpenStreetMap embed. No map library and no JavaScript: the
+                         map is a page served by openstreetmap.org inside an iframe. -->
+                    <th:block th:if="${l.lat != null and l.lon != null}">
+                        <iframe class="lab-map" loading="lazy" title="OpenStreetMap"
+                                th:attr="src=${'https://www.openstreetmap.org/export/embed.html?bbox='
+                                        + (l.lon - 0.02) + ',' + (l.lat - 0.02) + ','
+                                        + (l.lon + 0.02) + ',' + (l.lat + 0.02)
+                                        + '&amp;layer=mapnik&amp;marker=' + l.lat + ',' + l.lon}"></iframe>
+                        <p style="margin-top:8px;">
+                            <a class="btn btn--ghost"
+                               th:href="${'https://www.openstreetmap.org/?mlat=' + l.lat + '&amp;mlon=' + l.lon
+                                        + '#map=15/' + l.lat + '/' + l.lon}"
+                               th:text="#{lab.near.map}">Open in OpenStreetMap</a>
+                            <a class="btn btn--ghost"
+                               th:href="${'https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lon}"
+                               target="_blank" rel="noopener"
+                               th:text="#{lab.near.gmaps}">Open in Google Maps</a>
+                        </p>
+                    </th:block>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: lab-near -->
+
+</th:block>
+
+</body>
+</html>

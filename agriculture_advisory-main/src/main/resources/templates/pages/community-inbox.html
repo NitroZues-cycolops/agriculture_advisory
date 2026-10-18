@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Private-message inbox (workspace 6) - STEP 6.
+  ROUTE   : GET /community/messages   -> CommunityController.inbox
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a conversations tile and a "start a chat" tile.
+  DATA    : conversations, members, role, unread
+  NO JAVASCRIPT : every row is a link to the thread page.
+  If this breaks, check:
+    - "No messages yet" -> direct_messages has no rows for this user.
+    - Text as a missing key -> community.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: comminbox-list | controller: CommunityController.inbox -->
+    <div class="tile tile--form" id="tile-comminbox-list" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.inbox.title}">[6] Inbox</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(conversations)}"
+               th:text="#{community.inbox.empty}">No messages yet.</p>
+
+            <div class="post" th:each="c : ${conversations}">
+                <div class="post__meta">
+                    <span th:replace="~{fragments/avatar :: avatar(${c.otherId}, ${c.otherName}, ${withPhoto.contains(c.otherId)})}"></span>
+                    <a th:href="@{/community/profile/{id}(id=${c.otherId})}"
+                       th:text="${c.otherName}">Farmer</a>
+                    <span th:if="${c.lastAt != null}"
+                          th:text="${#temporals.format(c.lastAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span class="tag tag--warn" th:if="${c.unread > 0}"
+                          th:text="#{community.inbox.unread(${c.unread})}">1 unread</span>
+                </div>
+                <!-- PART 2b: a soft-deleted last message has blank text - show the
+                     same placeholder the thread does, never an empty line. -->
+                <p class="card__text" th:if="${c.lastContent == null or c.lastContent.isBlank()}"
+                   th:text="#{community.message.deleted}">This message was deleted.</p>
+                <p class="card__text" th:unless="${c.lastContent == null or c.lastContent.isBlank()}"
+                   th:text="${c.lastContent}">last message</p>
+                <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${c.otherId})}"
+                   th:text="#{community.inbox.open}">Open</a>
+            </div>
+
+            <p style="margin-top:12px;">
+                <a class="card__btn" th:href="@{/community}" th:text="#{community.back}">Back to community</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: comminbox-list -->
+
+    <!-- TILE START: comminbox-new | controller: CommunityController.inbox | full-width -->
+    <div class="tile tile--span" id="tile-comminbox-new">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.inbox.new}">[6] Start a conversation</span>
+        </div>
+        <div class="tile__body">
+            <div class="lab-grid">
+                <div class="lab-card" th:each="m : ${members}">
+                    <div class="with-avatar">
+                        <span th:replace="~{fragments/avatar :: avatar(${m.userId}, ${m.displayName()}, ${withPhoto.contains(m.userId)})}"></span>
+                        <div class="lab-card__name" th:text="${m.displayName()}">Farmer</div>
+                    </div>
+                    <p class="card__text" th:if="${m.district != null}" th:text="${m.district}">Pune</p>
+                    <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${m.userId})}"
+                       th:text="#{community.message}">Message</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: comminbox-new -->
+
+</th:block>
+
+</body>
+</html>

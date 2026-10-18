@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Government schemes list (workspace 5) - STEP 3. A header, a
+            "Find my district office" tile and one card per scheme.
+  ROUTE   : GET /schemes   (SchemesController.list)
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> header tile (tile--span) then one 300px card per
+            scheme, centred; 4 per row on desktop, 3 on tablet, 1 on phone.
+  DATA    : schemes      -> List<Scheme> (name + short text in the active
+                            language, read from the DB tables)
+            hasProfile   -> true when a farmer profile with a district exists
+            districtName -> the farmer's district (shown in the office tile)
+            office       -> DistrictOffice (SAMPLE) or null
+  NO JAVASCRIPT : the scheme text is NOT a message key - it comes from the
+            `scheme_text` table so the OWNER can edit it in STEP 7 without a
+            rebuild. Only the surrounding labels are message keys.
+  If this breaks, check:
+    - A scheme is missing -> a row is missing from `schemes` (data_new.sql).
+    - A card has no name/description -> `scheme_text` has no row for that
+      scheme and language.
+    - a missing key text -> schemes.* keys in all four message files.
+    - The office tile always says "save your district" -> /profile has no
+      district saved for the logged-in farmer.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 5)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: schemes-header | controller: SchemesController.list | full-width -->
+    <div class="tile tile--span" id="tile-schemes-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{nav.schemes}">[5] Schemes</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{schemes.title}">Government Schemes</h1>
+                <p class="page-head__sub" th:text="#{schemes.intro}">Simple guides to the main government schemes.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: schemes-header -->
+
+    <!-- TILE START: schemes-office | controller: SchemesController.addOfficeTile -->
+    <div class="tile" id="tile-schemes-office" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.office.title}">[5] Find my district office</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">🏢</span>
+            <h2 class="card__title" th:text="#{schemes.office.title}">Find my district office</h2>
+
+            <!-- A farmer with a saved district: show the district + SAMPLE office row. -->
+            <th:block th:if="${hasProfile}">
+                <p class="card__text" th:text="#{schemes.office.foryou} + ': ' + ${districtName}">Your district office</p>
+                <p class="card__text" th:if="${office != null}" th:text="${office.officeName}">District Agriculture Office</p>
+                <p class="card__text" th:if="${office != null}" th:text="${office.address}">address</p>
+                <p class="sample-note" th:text="#{schemes.office.sample}">SAMPLE - verify locally.</p>
+            </th:block>
+
+            <!-- No district yet: send the farmer to their profile. -->
+            <th:block th:unless="${hasProfile}">
+                <p class="card__text" th:text="#{schemes.office.none}">Save your district in your profile.</p>
+                <a class="card__btn" th:href="@{/profile}" th:text="#{schemes.office.profile_link}">Go to profile</a>
+            </th:block>
+        </div>
+    </div>
+    <!-- TILE END: schemes-office -->
+
+    <!-- One card per scheme. The tile id uses the scheme key so it is unique. -->
+    <!-- TILE START: schemes-card | controller: SchemesController.list -->
+    <div class="tile" th:each="s : ${schemes}" th:id="'tile-scheme-' + ${s.schemeKey}" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + ${s.name}">[5] PM-KISAN</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <!-- Server-side icon choice (no JavaScript): one emoji per scheme. -->
+            <span class="card__icon" aria-hidden="true"
+                  th:switch="${s.schemeKey}">
+                <th:block th:case="'pmkisan'">💰</th:block>
+                <th:block th:case="'mahadbt'">🖥️</th:block>
+                <th:block th:case="'pmfby'">🌾</th:block>
+                <th:block th:case="'soilhealth'">🧪</th:block>
+                <th:block th:case="'mahabhulekh'">📄</th:block>
+                <th:block th:case="'kcc'">💳</th:block>
+                <th:block th:case="'farmerid'">🪪</th:block>
+                <th:block th:case="*">📜</th:block>
+            </span>
+            <h2 class="card__title" th:text="${s.name}">PM-KISAN</h2>
+            <p class="card__text" th:text="${s.what}">description</p>
+            <a class="card__btn" th:href="@{'/schemes/' + ${s.schemeKey}}" th:text="#{schemes.card.open}">Open guide</a>
+        </div>
+    </div>
+    <!-- TILE END: schemes-card -->
+
+</th:block>
+
+</body>
+</html>

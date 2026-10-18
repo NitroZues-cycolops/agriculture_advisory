@@ -1,0 +1,105 @@
+<!--
+  =====================================================================
+  PURPOSE : The shared header. Two rows: a centred app title with the
+            language switcher and login/logout on the right, then a centred
+            uppercase row of numbered workspace links 1-7 (Hyprland style).
+  ROUTE   : part of every page (inserted by layouts/main.html)
+  DATA    : topbar(active)
+              active = workspace number 1-7 to highlight, passed straight from
+                       main(content, layoutClass, active). 0 = no workspace.
+            Also reads the Spring Security authentication from #authentication.
+  If this breaks, check:
+    - Wrong workspace underlined -> the 3rd argument of main(...) in the page.
+    - Text as a missing key -> nav.* keys in messages*.properties.
+    - Phone menu does not open -> style.css section 7 (.nav-toggle:checked ~
+      .topbar__nav) and keep the checkbox as a direct child of .topbar BEFORE
+      <nav class="topbar__nav">.
+  ACCESSKEY: 1-7 jump straight to a workspace.
+  =====================================================================
+-->
+<div th:fragment="topbar(active)" class="topbar"
+     xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+    <!-- Phone-only menu checkbox. Must stay a direct child of .topbar and
+         appear BEFORE .topbar__nav so the "~" selector can reach it. -->
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+
+    <!-- ROW 1: centred title + language / user / login on the right -->
+    <div class="topbar__bar">
+
+        <strong class="topbar__title" th:text="#{nav.app_name}">Precision Farming Advisory</strong>
+
+        <div class="topbar__right">
+
+            <!-- phone-only button that ticks the checkbox above -->
+            <label for="nav-toggle" class="nav-toggle-label">
+                <span aria-hidden="true">☰</span>
+                <span th:text="#{nav.menu}">Menu</span>
+            </label>
+
+            <!-- Language switcher; the locale is kept in the session by
+                 LocaleChangeInterceptor (see SecurityConfig). -->
+            <div class="lang-switcher">
+                <a th:href="@{/(lang=en)}">EN</a>
+                <span aria-hidden="true">|</span>
+                <a th:href="@{/(lang=hi)}">हिं</a>
+                <span aria-hidden="true">|</span>
+                <a th:href="@{/(lang=mr)}">मरा</a>
+            </div>
+
+            <!-- Owner-only shortcut to the admin panel (STEP 7). Shown next to
+                 the username so the 7 workspaces keep their fixed numbers.
+                 sec:authorize (thymeleaf-extras-springsecurity6) avoids calling
+                 toString() on the unmodifiable authorities list in SpEL. -->
+            <a class="btn btn--ghost" sec:authorize="hasRole('OWNER')"
+               th:href="@{/owner}" th:text="#{owner.panel}">Owner</a>
+
+            <!-- Logged in: username + Logout (POST, so CSRF applies) -->
+            <span class="topbar__user"
+                  th:if="${#authentication != null and #authentication.name != 'anonymousUser'}"
+                  th:text="${#authentication.name}">user</span>
+            <form th:if="${#authentication != null and #authentication.name != 'anonymousUser'}"
+                  th:action="@{/logout}" method="post">
+                <button type="submit" th:text="#{nav.logout}">Logout</button>
+            </form>
+
+            <!-- Anonymous: Login -->
+            <a class="btn" th:if="${#authentication == null or #authentication.name == 'anonymousUser'}"
+               th:href="@{/login}" th:text="#{auth.login}">Login</a>
+
+        </div>
+    </div>
+
+    <!-- ROW 2: workspaces 1-7 -->
+    <nav class="topbar__nav">
+        <a class="workspace-btn" th:classappend="${active == 1} ? 'workspace-btn--active'"
+           th:href="@{/}" accesskey="1" th:title="#{nav.workspace.hint(1)}">
+            <span class="workspace-btn__num">[1]</span><span th:text="#{nav.home}">Home</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 2} ? 'workspace-btn--active'"
+           th:href="@{/nowcast}" accesskey="2" th:title="#{nav.workspace.hint(2)}">
+            <span class="workspace-btn__num">[2]</span><span th:text="#{nav.nowcast}">Nowcast</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 3} ? 'workspace-btn--active'"
+           th:href="@{/forecast}" accesskey="3" th:title="#{nav.workspace.hint(3)}">
+            <span class="workspace-btn__num">[3]</span><span th:text="#{nav.forecast}">Forecast</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 4} ? 'workspace-btn--active'"
+           th:href="@{/lab}" accesskey="4" th:title="#{nav.workspace.hint(4)}">
+            <span class="workspace-btn__num">[4]</span><span th:text="#{nav.lab}">Lab</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 5} ? 'workspace-btn--active'"
+           th:href="@{/schemes}" accesskey="5" th:title="#{nav.workspace.hint(5)}">
+            <span class="workspace-btn__num">[5]</span><span th:text="#{nav.schemes}">Schemes</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 6} ? 'workspace-btn--active'"
+           th:href="@{/community}" accesskey="6" th:title="#{nav.workspace.hint(6)}">
+            <span class="workspace-btn__num">[6]</span><span th:text="#{nav.community}">Community</span>
+        </a>
+        <a class="workspace-btn" th:classappend="${active == 7} ? 'workspace-btn--active'"
+           th:href="@{/profile}" accesskey="7" th:title="#{nav.workspace.hint(7)}">
+            <span class="workspace-btn__num">[7]</span><span th:text="#{nav.profile}">Profile</span>
+        </a>
+    </nav>
+
+</div>

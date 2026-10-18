@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 3 - "Find farmers": a public directory with a district
+            filter and a name search. Every card is the shared person card
+            (avatar, name, district, taluka, crops) - never phone or email.
+  ROUTE   : GET /farmers -> CommunityController.farmers
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a filter tile and a results tile.
+  DATA    : farmers, following (ids I follow), me, districts, district, q, withPhoto
+  NO JAVASCRIPT : the filter is a plain GET form; Follow / Unfollow are POST forms.
+  If this breaks, check:
+    - no results          -> try clearing the district / the name.
+    - a missing key       -> farmers.* / person.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: farmers-header | controller: CommunityController.farmers | full-width -->
+    <div class="tile tile--span" id="tile-farmers-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{farmers.title}">[6] Find farmers</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{farmers.title}">Find farmers</h1>
+                <p class="page-head__sub" th:text="#{farmers.intro}">Search for other farmers and follow them to start a conversation.</p>
+            </div>
+
+            <p>
+                <a class="card__btn" th:href="@{/messages}" th:text="#{messages.title}">Messages</a>
+                <a class="card__btn" th:href="@{/community}" th:text="#{community.back}">Back to community</a>
+            </p>
+
+            <!-- A plain GET form: filters appear in the URL, so a farmer can
+                 bookmark or share the result. No JavaScript. -->
+            <form th:action="@{/farmers}" method="get" style="margin-top:12px;">
+                <div class="form-grid">
+                    <div class="form-row">
+                        <label for="q" th:text="#{farmers.search.label}">Name</label>
+                        <input type="text" id="q" name="q" th:value="${q}"
+                               th:placeholder="#{farmers.search.label}">
+                    </div>
+                    <div class="form-row">
+                        <label for="district" th:text="#{farmers.district.label}">District</label>
+                        <select id="district" name="district">
+                            <option value="" th:text="#{farmers.district.all}">All districts</option>
+                            <option th:each="d : ${districts}" th:value="${d.nameEn}"
+                                    th:selected="${district == d.nameEn}"
+                                    th:text="${d.nameFor(#locale.language)}">Pune</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{farmers.search.submit}">Search</button>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: farmers-header -->
+
+    <!-- TILE START: farmers-list | controller: CommunityController.farmers | full-width -->
+    <div class="tile tile--span" id="tile-farmers-list">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.tile.members}">[6] Farmers</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(farmers)}"
+               th:text="#{farmers.empty}">No farmers match your search.</p>
+
+            <p class="form-hint" th:unless="${#lists.isEmpty(farmers)}"
+               th:text="#{farmers.count(${#lists.size(farmers)})}">3 farmer(s)</p>
+
+            <div class="lab-grid" th:unless="${#lists.isEmpty(farmers)}">
+                <div th:each="m : ${farmers}"
+                     th:replace="~{fragments/person :: card(${m}, ${me}, ${following}, '/farmers')}"></div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: farmers-list -->
+
+</th:block>
+
+</body>
+</html>

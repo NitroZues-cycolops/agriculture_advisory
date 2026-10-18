@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 3 - ONE reusable "farmer card" for the profile
+            Following / Followers / Connections tiles and the /farmers
+            directory. It shows ONLY public details - avatar, name, district,
+            taluka and crops - and NEVER another user's phone or email.
+  USAGE   : <div th:replace="~{fragments/person :: card(${m}, ${me}, ${following}, ${back})}"></div>
+              m         = a Member (CommunityDao.MEMBER_MAPPER)
+              me        = the viewer's user id (never shows actions on yourself)
+              following = Set<Long> of ids the viewer follows (Follow vs Unfollow)
+              back      = the path the follow/unfollow buttons return to
+            The surrounding page must put `withPhoto` (a Set<Long>) in the model.
+  NO JAVASCRIPT : Follow / Unfollow are POST forms; Chat and View profile are links.
+  If this breaks, check:
+    - a missing key on screen -> messages*.properties (person.*, community.*).
+    - focus glow missing      -> style.css section 4 (.tile:hover / :focus-within).
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<div th:fragment="card(m, me, following, back)" class="lab-card">
+    <div class="with-avatar">
+        <span th:replace="~{fragments/avatar :: avatar(${m.userId}, ${m.displayName()}, ${withPhoto.contains(m.userId)})}"></span>
+        <div class="lab-card__name">
+            <a th:href="@{/community/profile/{id}(id=${m.userId})}"
+               th:text="${m.displayName()}">Farmer</a>
+        </div>
+    </div>
+
+    <ul class="info-list">
+        <li th:if="${m.district != null}">
+            <span class="label" th:text="#{community.profile.district}">District</span>
+            <span th:text="${m.district}">Pune</span>
+        </li>
+        <li th:if="${m.taluka != null}">
+            <span class="label" th:text="#{community.profile.taluka}">Taluka</span>
+            <span th:text="${m.taluka}">Haveli</span>
+        </li>
+        <li th:if="${!#strings.isEmpty(m.crops)}">
+            <span class="label" th:text="#{community.profile.crops}">Crops</span>
+            <span>
+                <span class="tag" th:each="c : ${#strings.arraySplit(m.crops, ',')}"
+                      th:text="${#messages.msg('crop.' + #strings.trim(c))}">Rice</span>
+            </span>
+        </li>
+    </ul>
+
+    <div class="btn-row" th:if="${m.userId != me}" style="margin-top:8px;">
+        <a class="btn btn--ghost" th:href="@{/community/profile/{id}(id=${m.userId})}"
+           th:text="#{person.view}">View profile</a>
+        <a class="btn btn--ghost" th:href="@{/messages/{id}(id=${m.userId})}"
+           th:text="#{person.chat}">Chat</a>
+        <form th:if="${!following.contains(m.userId)}"
+              th:action="@{/community/follow/{id}(id=${m.userId})}" method="post">
+            <input type="hidden" name="back" th:value="${back}">
+            <button type="submit" class="btn btn--ghost"
+                    th:text="#{community.follow}">Follow</button>
+        </form>
+        <form th:if="${following.contains(m.userId)}"
+              th:action="@{/community/unfollow/{id}(id=${m.userId})}" method="post">
+            <input type="hidden" name="back" th:value="${back}">
+            <button type="submit" class="btn btn--ghost"
+                    th:text="#{community.unfollow}">Unfollow</button>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 2b - the CONFIRM page shown before YOUR OWN chat message is
+            deleted.
+  ROUTE   : GET  /community/message/{id}/delete -> CommunityController.deleteMessageForm
+            POST /community/message/{id}/delete -> CommunityController.deleteMessage
+  ROLE    : the message SENDER only; anyone else -> 403
+  LAYOUT  : layout-home -> one confirmation tile.
+  DATA    : message, otherId, unread
+  HOW IT WORKS: this is a SOFT delete - the text is cleared, so BOTH people in
+            the conversation keep seeing the bubble as "This message was
+            deleted" (see the thread and the inbox). Nothing is lost mid-thread.
+  If this breaks, check:
+    - 403 -> the message was sent by the other person, not by you.
+    - Text as a missing key -> community.message.delete.* keys in all four files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commmessage-delete | controller: CommunityController.deleteMessageForm -->
+    <div class="tile tile--form" id="tile-commmessage-delete" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.message.delete.title}">[6] Delete this message?</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:text="#{community.message.delete.body}">The message will be replaced by "This message was deleted" for both of you.</p>
+
+            <!-- WHAT will be deleted: the message bubble itself. -->
+            <div class="post" style="margin-top:12px;">
+                <div class="post__meta">
+                    <span th:text="${message.senderName}">Farmer</span>
+                    <span th:text="${#temporals.format(message.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+                <p class="card__text" th:text="${message.content}">message</p>
+            </div>
+
+            <p class="btn-row" style="margin-top:14px;">
+                <form th:action="@{/community/message/{id}/delete(id=${message.id})}" method="post"
+                      style="display:inline;">
+                    <button type="submit" class="btn btn--danger"
+                            th:text="#{community.delete.confirm}">Yes, delete</button>
+                </form>
+                <a class="btn" th:href="@{/community/messages/{id}(id=${otherId})}"
+                   th:text="#{common.cancel}">Cancel</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: commmessage-delete -->
+
+</th:block>
+
+</body>
+</html>

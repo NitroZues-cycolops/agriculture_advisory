@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Landing page (workspace 1). Centred header over a grid of equal
+            cards, one per workspace 2-7. Also the public entry point.
+  ROUTE   : GET /   (MainController.home)
+  LAYOUT  : layout-home -> a full-width header tile (tile--span) then one
+            300px card per workspace. The container is a centred flex-wrap
+            row with max-width 1300px, so 4 cards sit on the first row and the
+            rest are centred underneath (style.css section 5).
+            Tablet -> 3 per row; phone (<800px) -> 1 per row.
+  LOOK    : each card = 76px circle with a 36px emoji, 20px title, 15px muted
+            description and a full-width pill button with an arrow. One accent
+            colour only: green-teal.
+  NUMBERS : the number in each card title bar equals the top-bar number for
+            that workspace (2 Nowcast ... 7 Profile).
+  DATA    : none from the controller; only #authentication to decide whether
+            to show the Login / Sign Up buttons.
+  If this breaks, check:
+    - Buttons missing -> #authentication is null or anonymous; see
+      SecurityConfig.securityFilterChain for the permitAll routes.
+    - Cards not centred -> .main-container must keep justify-content: center
+      (style.css section 5).
+    - Icon missing -> the emoji must sit in a .card__icon span.
+    - Text shows as a missing key -> home.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 1)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: home-header | controller: MainController.home | full-width -->
+    <div class="tile tile--span" id="tile-home-header" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{nav.home}">[1] Home</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{nav.app_name}">Precision Farming Advisory</h1>
+                <p class="page-head__sub" th:text="#{home.intro}">Welcome to the Maharashtra Precision Farming Advisory Service.</p>
+
+                <!-- Shown only to visitors who are not logged in yet. -->
+                <div class="page-head__cta"
+                     th:if="${#authentication == null or #authentication.name == 'anonymousUser'}">
+                    <a class="btn btn--primary" th:href="@{/login}" th:text="#{auth.login}">Login</a>
+                    <a class="btn" th:href="@{/signup}" th:text="#{auth.signup}">Sign Up</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: home-header -->
+
+    <!-- TILE START: home-nowcast | workspace 2 -->
+    <div class="tile" id="tile-home-nowcast" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nav.nowcast}">[2] Nowcast</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">🌦️</span>
+            <h2 class="card__title" th:text="#{nav.nowcast}">Nowcast</h2>
+            <p class="card__text" th:text="#{home.nowcast.brief}">Check the latest weather conditions in your district.</p>
+            <a class="card__btn" th:href="@{/nowcast}" th:text="#{home.nowcast.link}">View Nowcast</a>
+        </div>
+    </div>
+    <!-- TILE END: home-nowcast -->
+
+    <!-- TILE START: home-forecast | workspace 3 -->
+    <div class="tile" id="tile-home-forecast" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{nav.forecast}">[3] Forecast</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">📅</span>
+            <h2 class="card__title" th:text="#{nav.forecast}">Forecast</h2>
+            <p class="card__text" th:text="#{home.forecast.brief}">See the 7-day forecast for your district.</p>
+            <a class="card__btn" th:href="@{/forecast}" th:text="#{home.forecast.link}">View Forecast</a>
+        </div>
+    </div>
+    <!-- TILE END: home-forecast -->
+
+    <!-- TILE START: home-lab | workspace 4 -->
+    <div class="tile" id="tile-home-lab" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{nav.lab}">[4] Lab</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">🧪</span>
+            <h2 class="card__title" th:text="#{nav.lab}">Lab</h2>
+            <p class="card__text" th:text="#{home.lab.brief}">Request soil or water testing and track your reports.</p>
+            <a class="card__btn" th:href="@{/lab}" th:text="#{home.lab.link}">Open Lab Portal</a>
+        </div>
+    </div>
+    <!-- TILE END: home-lab -->
+
+    <!-- TILE START: home-schemes | workspace 5 -->
+    <div class="tile" id="tile-home-schemes" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{nav.schemes}">[5] Schemes</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">📜</span>
+            <h2 class="card__title" th:text="#{nav.schemes}">Schemes</h2>
+            <p class="card__text" th:text="#{home.schemes.brief}">Read simple guides on government schemes and how to register for them.</p>
+            <a class="card__btn" th:href="@{/schemes}" th:text="#{home.schemes.link}">Open Schemes</a>
+        </div>
+    </div>
+    <!-- TILE END: home-schemes -->
+
+    <!-- TILE START: home-community | workspace 6 -->
+    <div class="tile" id="tile-home-community" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{nav.community}">[6] Community</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">👥</span>
+            <h2 class="card__title" th:text="#{nav.community}">Community</h2>
+            <p class="card__text" th:text="#{home.community.brief}">Ask questions and share advice with other farmers.</p>
+            <a class="card__btn" th:href="@{/community}" th:text="#{home.community.link}">Open Community</a>
+        </div>
+    </div>
+    <!-- TILE END: home-community -->
+
+    <!-- TILE START: home-profile | workspace 7 -->
+    <div class="tile" id="tile-home-profile" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{nav.profile}">[7] Profile</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">👤</span>
+            <h2 class="card__title" th:text="#{nav.profile}">Profile</h2>
+            <p class="card__text" th:text="#{home.profile.brief}">Keep your farm and contact details up to date.</p>
+            <a class="card__btn" th:href="@{/profile}" th:text="#{home.profile.link}">Open Profile</a>
+        </div>
+    </div>
+    <!-- TILE END: home-profile -->
+
+</th:block>
+
+</body>
+</html>

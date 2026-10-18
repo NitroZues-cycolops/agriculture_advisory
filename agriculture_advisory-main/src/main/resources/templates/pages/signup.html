@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Sign-up chooser. A farmer and a lab need different forms, so this
+            page simply asks which one to create, then sends the user to the
+            matching registration page.
+  ROUTE   : GET /signup   (MainController.signup)
+  LAYOUT  : layout-center -> two centred content-sized tiles.
+  DATA    : none.
+  If this breaks, check:
+    - Links dead -> /register and /register/lab must exist (RegistrationController)
+      and both must be permitAll in SecurityConfig.
+    - Text shows as a missing key -> auth.signup.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-center', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: signup-choose | controller: MainController.signup -->
+    <div class="tile" id="tile-signup-choose" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{auth.signup}">[1] Sign Up</span>
+        </div>
+        <div class="tile__body">
+            <p th:text="#{auth.signup.choose}">Choose the account type you want to create.</p>
+
+            <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px;">
+                <a class="card__btn" th:href="@{/register}"
+                   th:text="#{auth.signup.farmer}">Register as a Farmer</a>
+                <a class="card__btn" th:href="@{/register/lab}"
+                   th:text="#{auth.signup.lab}">Register a Soil Testing Lab</a>
+            </div>
+
+            <p class="auth-alt">
+                <span th:text="#{auth.signup.have_account}">Already have an account?</span>
+                <a th:href="@{/login}" th:text="#{auth.login}">Login</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: signup-choose -->
+
+    <!-- TILE START: signup-about | static about text -->
+    <div class="tile" id="tile-signup-about" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{about.title}">[2] About this app</span>
+        </div>
+        <div class="tile__body">
+            <p th:text="#{about.body}">This service helps the farmers of Maharashtra...</p>
+        </div>
+    </div>
+    <!-- TILE END: signup-about -->
+
+</th:block>
+
+</body>
+</html>

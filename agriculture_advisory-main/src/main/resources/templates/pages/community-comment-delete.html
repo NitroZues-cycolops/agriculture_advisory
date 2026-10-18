@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 2b - the CONFIRM page shown before YOUR OWN comment is deleted.
+  ROUTE   : GET  /community/comment/{id}/delete -> CommunityController.deleteCommentForm
+            POST /community/comment/{id}/delete -> CommunityController.deleteComment
+  ROLE    : the comment's author (or an OWNER); anyone else -> 403
+  LAYOUT  : layout-home -> one confirmation tile.
+  DATA    : comment, unread
+  WHY A PAGE: the GET only SHOWS the comment that will go; the POST (the
+            "Yes, delete" button) removes it. "Cancel" is a link back to the post.
+  If this breaks, check:
+    - 403 -> the comment belongs to someone else and the account is not an OWNER.
+    - Text as a missing key -> community.comment.delete.* keys in all four files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commcomment-delete | controller: CommunityController.deleteCommentForm -->
+    <div class="tile tile--form" id="tile-commcomment-delete" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.comment.delete.title}">[6] Delete this comment?</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:text="#{community.comment.delete.body}">Your comment will be removed from the post. This cannot be undone.</p>
+
+            <!-- WHAT will be deleted: the comment itself. -->
+            <div class="post" style="margin-top:12px;">
+                <div class="post__meta">
+                    <span th:text="${comment.authorName}">Farmer</span>
+                    <span th:text="${#temporals.format(comment.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+                <p class="card__text" th:text="${comment.content}">A comment.</p>
+            </div>
+
+            <p class="btn-row" style="margin-top:14px;">
+                <form th:action="@{/community/comment/{id}/delete(id=${comment.id})}" method="post"
+                      style="display:inline;">
+                    <button type="submit" class="btn btn--danger"
+                            th:text="#{community.delete.confirm}">Yes, delete</button>
+                </form>
+                <a class="btn" th:href="@{/community/post/{id}(id=${comment.postId})}"
+                   th:text="#{common.cancel}">Cancel</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: commcomment-delete -->
+
+</th:block>
+
+</body>
+</html>

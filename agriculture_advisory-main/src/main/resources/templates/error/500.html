@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : 500 Server Error page, styled in the same tile layout.
+            In development it also prints the exception message, which is
+            the fastest way to see what actually broke.
+  ROUTE   : GET /error   (CustomErrorController, when status = 500)
+  LAYOUT  : layout-single -> one tile filling the window.
+  DATA    : message  (the exception text, only present when the request had one)
+  If this breaks, check:
+    - The debug block is missing -> the "message" model attribute was not set,
+      so the error happened without an exception (see CustomErrorController).
+    - Text shows as a missing key -> error.500.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-single', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: error-500 | controller: CustomErrorController -->
+    <div class="tile" id="tile-error-500" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[!] ' + #{error.500.title}">[!] 500 - Server Error</span>
+        </div>
+        <div class="tile__body">
+            <div class="tile__body--center">
+                <span class="card__icon" aria-hidden="true">💥</span>
+                <h2 th:text="#{error.500.heading}">Something went wrong.</h2>
+                <p th:text="#{error.500.message}">An internal server error occurred.</p>
+            </div>
+
+            <!-- Development only: raw exception text for debugging. -->
+            <div th:if="${message}" style="margin-top:14px;">
+                <h3 th:text="#{error.debug_info}">Debug info</h3>
+                <div class="debug-block" th:text="${message}">java.lang.Exception: ...</div>
+            </div>
+
+            <p style="margin-top:14px; text-align:center;">
+                <a class="btn btn--primary" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: error-500 -->
+
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : PART 3 - the FRIENDLY "follow first" page shown when a farmer
+            opens a chat with someone they neither follow nor are followed by.
+            It is NOT the error view: it explains the rule and offers a Follow
+            button. (The HTTP status is still 403 so the rule stays testable.)
+  ROUTE   : GET /messages/{id} -> CommunityController.thread (canChat == false)
+  ROLE    : any authenticated user (but only for an unconnected pair)
+  LAYOUT  : layout-home -> one explanation tile.
+  DATA    : other, me, following, withPhoto
+  NO JAVASCRIPT : Follow/Unfollow is a POST form.
+  If this breaks, check:
+    - the farmer is never blocked from a chat they should be allowed -> the rule
+      is canChat = I follow them OR they follow me (see CommunityDao.canChat).
+    - Text as a missing key -> messages.blocked.* in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: messages-blocked | controller: CommunityController.thread -->
+    <div class="tile tile--form" id="tile-messages-blocked" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{messages.title}">[6] Messages</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="page-head">
+                <span class="page-head__avatar">
+                    <span th:replace="~{fragments/avatar :: avatar(${other.userId}, ${other.displayName()}, ${withPhoto.contains(other.userId)})}"></span>
+                </span>
+                <h1 class="page-head__title" th:text="#{messages.blocked.title}">You cannot message this farmer yet</h1>
+            </div>
+
+            <p class="card__text" th:text="#{messages.blocked.body(${other.displayName()})}">Follow this farmer to start a conversation.</p>
+
+            <div class="btn-row" style="margin-top:10px;">
+                <form th:if="${!following}"
+                      th:action="@{/community/follow/{id}(id=${other.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/messages/' + other.userId}">
+                    <button type="submit" class="btn btn--primary"
+                            th:text="#{community.follow}">Follow</button>
+                </form>
+                <form th:if="${following}"
+                      th:action="@{/community/unfollow/{id}(id=${other.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/messages/' + other.userId}">
+                    <button type="submit" class="btn btn--ghost"
+                            th:text="#{community.unfollow}">Unfollow</button>
+                </form>
+                <a class="btn btn--ghost" th:href="@{/messages}"
+                   th:text="#{messages.blocked.back}">Back to messages</a>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: messages-blocked -->
+
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Soil / water testing lab registration (STEP 2). A lab that
+            registers here is stored with status PENDING and is NOT shown to
+            farmers until the owner approves it (STEP 7).
+  ROUTE   : GET  /register/lab -> LabRegisterController.form
+            POST /register/lab -> LabRegisterController.submit
+  ROLE    : public (SecurityConfig permits /register/lab)
+  LAYOUT  : layout-home -> .tile--form tiles (620px), two per row, centred.
+  DATA    : form           -> values the user typed (echoed on error)
+            errors         -> Map field -> already-translated error message
+            districts, samples
+            selectedSamples -> List<String> of ticked sample-type codes
+  NO JAVASCRIPT
+            One hidden <form id="labRegForm"> owns every input in the tiles
+            through the HTML5 form="labRegForm" attribute, so the whole page is
+            a single POST and the CSRF token (added by th:action) is included.
+  If this breaks, check:
+    - "Invalid CSRF token" -> keep th:action on the <form> and keep it in the page.
+    - A field empties after an error -> input name != the key used in `form`.
+    - a missing key on screen -> labreg.* / field.* / sample.* keys in all four files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <form id="labRegForm" th:action="@{/register/lab}" method="post" style="display:none;"></form>
+
+    <!-- TILE START: labreg-header | controller: LabRegisterController -->
+    <div class="tile tile--span" id="tile-labreg-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{labreg.title}">[1] Lab Registration</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{labreg.title}">Lab Registration</h1>
+                <p class="page-head__sub" th:text="#{labreg.intro}">Register your soil / water testing lab. The owner approves it before farmers can see it.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: labreg-header -->
+
+    <!-- TILE START: labreg-account | controller: LabRegisterController -->
+    <div class="tile tile--form" id="tile-labreg-account" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{labreg.tile.account}">[2] Login and lab details</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="lab-username" th:text="#{field.username}">Username</label>
+                    <input type="text" id="lab-username" name="username" form="labRegForm" required
+                           th:value="${form['username']}"
+                           th:classappend="${errors['username'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['username'] != null}"
+                          th:text="${errors['username']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="lab-name" th:text="#{field.lab_name}">Lab name</label>
+                    <input type="text" id="lab-name" name="name" form="labRegForm" required
+                           th:value="${form['name']}"
+                           th:classappend="${errors['name'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['name'] != null}"
+                          th:text="${errors['name']}">error</span>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="lab-password" th:text="#{field.password}">Password</label>
+                    <input type="password" id="lab-password" name="password" form="labRegForm" required
+                           autocomplete="new-password"
+                           th:classappend="${errors['password'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['password'] != null}"
+                          th:text="${errors['password']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="lab-confirm" th:text="#{field.confirm}">Confirm password</label>
+                    <input type="password" id="lab-confirm" name="confirm" form="labRegForm" required
+                           autocomplete="new-password"
+                           th:classappend="${errors['confirm'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['confirm'] != null}"
+                          th:text="${errors['confirm']}">error</span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="lab-address" th:text="#{field.address}">Address</label>
+                <textarea id="lab-address" name="address" form="labRegForm" required
+                          th:text="${form['address']}"
+                          th:classappend="${errors['address'] != null} ? ' is-invalid'"></textarea>
+                <span class="form-error" th:if="${errors['address'] != null}"
+                      th:text="${errors['address']}">error</span>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="lab-district" th:text="#{field.district}">District</label>
+                    <select id="lab-district" name="district" form="labRegForm" required
+                            th:classappend="${errors['district'] != null} ? ' is-invalid'">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="d : ${districts}" th:value="${d.nameEn}"
+                                th:selected="${form['district'] == d.nameEn}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                    <span class="form-error" th:if="${errors['district'] != null}"
+                          th:text="${errors['district']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="lab-taluka" th:text="#{field.taluka}">Taluka</label>
+                    <input type="text" id="lab-taluka" name="taluka" form="labRegForm" required
+                           th:value="${form['taluka']}"
+                           th:classappend="${errors['taluka'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['taluka'] != null}"
+                          th:text="${errors['taluka']}">error</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <!-- TILE END: labreg-account -->
+
+    <!-- TILE START: labreg-requirements | controller: LabRegisterController -->
+    <div class="tile tile--form" id="tile-labreg-requirements" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{labreg.tile.requirements}">[3] Contact and requirements</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="lab-email" th:text="#{field.email}">Email</label>
+                    <input type="email" id="lab-email" name="email" form="labRegForm" required
+                           autocomplete="email"
+                           th:value="${form['email']}"
+                           th:classappend="${errors['email'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['email'] != null}"
+                          th:text="${errors['email']}">error</span>
+                    <span class="form-hint" th:text="#{labreg.email.hint}">We send your email verification link here.</span>
+                </div>
+                <div class="form-row">
+                    <label for="lab-phone" th:text="#{field.phone}">Phone</label>
+                    <input type="text" id="lab-phone" name="phone" form="labRegForm"
+                           inputmode="numeric" maxlength="10"
+                           th:value="${form['phone']}"
+                           th:classappend="${errors['phone'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['phone'] != null}"
+                          th:text="${errors['phone']}">error</span>
+                    <span class="form-hint" th:text="#{labreg.phone.hint}">Optional. If given, use 10 digits starting with 6-9.</span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="lab-timings" th:text="#{field.timings}">Timings</label>
+                <input type="text" id="lab-timings" name="timings" form="labRegForm"
+                       th:value="${form['timings']}" th:placeholder="#{labreg.timings.hint}">
+            </div>
+
+            <div class="form-row">
+                <label th:text="#{field.samples}">Accepted sample types</label>
+                <div class="check-grid">
+                    <label th:each="s : ${samples}">
+                        <input type="checkbox" name="samples" form="labRegForm" th:value="${s}"
+                               th:checked="${selectedSamples.contains(s)}">
+                        <span th:text="${#messages.msg('sample.' + s)}">Soil</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="lab-req" th:text="#{field.requirements}">Requirements for the farmer</label>
+                <textarea id="lab-req" name="requirements" form="labRegForm"
+                          th:text="${form['requirements']}"
+                          th:placeholder="#{labreg.requirements.hint}"></textarea>
+                <span class="form-hint" th:text="#{register.no_fee_note}">Do not state a fee unless it is your official rate.</span>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="lab-lat" th:text="#{field.lat}">Latitude (optional)</label>
+                    <input type="text" id="lab-lat" name="lat" form="labRegForm"
+                           th:value="${form['lat']}"
+                           th:classappend="${errors['lat'] != null} ? ' is-invalid'">
+                </div>
+                <div class="form-row">
+                    <label for="lab-lon" th:text="#{field.lon}">Longitude (optional)</label>
+                    <input type="text" id="lab-lon" name="lon" form="labRegForm"
+                           th:value="${form['lon']}"
+                           th:classappend="${errors['lon'] != null} ? ' is-invalid'">
+                </div>
+            </div>
+            <span class="form-error" th:if="${errors['lat'] != null}" th:text="${errors['lat']}">error</span>
+
+            <p class="btn-row" style="margin-top:10px;">
+                <button type="submit" form="labRegForm" class="btn btn--primary"
+                        th:text="#{labreg.submit}">Register lab</button>
+                <a class="btn" th:href="@{/signup}" th:text="#{common.back}">Back</a>
+            </p>
+
+            <p class="form-hint" th:text="#{labreg.pending.note}">Your lab stays PENDING until the owner approves it.</p>
+
+        </div>
+    </div>
+    <!-- TILE END: labreg-requirements -->
+
+</th:block>
+
+</body>
+</html>
