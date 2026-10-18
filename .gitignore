@@ -38,3 +38,6 @@ uploads/*
 !uploads/.gitkeep
 .env
 *.log
+mysql_data/
+application-local.properties
+*-local.properties
