@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Owner scheme list (STEP 7). One row per government scheme with
+            an "Edit" link for each language (English / Hindi / Marathi).
+  ROUTE   : GET /owner/schemes -> OwnerController.schemes
+  ROLE    : OWNER only
+  LAYOUT  : layout-home -> a full-width header tile and a full-width table.
+  DATA    : schemes (List of Scheme, English text)
+  NO JAVASCRIPT : plain links.
+  If this breaks, check:
+    - Empty table -> the `schemes` / `scheme_text` rows (data_new.sql).
+    - 403 -> the logged-in user is not the OWNER.
+    - Text shows as a missing key -> owner.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: owner-schemes-header | controller: OwnerController.schemes | full-width -->
+    <div class="tile tile--span" id="tile-owner-schemes-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[8] ' + #{owner.schemes.title}">[8] Government schemes</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{owner.schemes.title}">Government schemes</h1>
+                <p class="page-head__sub" th:text="#{owner.schemes.intro}">Edit the text farmers read. Each scheme is edited one language at a time.</p>
+            </div>
+            <p style="margin-top:12px;">
+                <a class="btn" th:href="@{/owner}" th:text="#{owner.back}">Back to owner panel</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: owner-schemes-header -->
+
+    <!-- TILE START: owner-schemes-list | controller: OwnerController.schemes | full-width -->
+    <div class="tile tile--span" id="tile-owner-schemes-list">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{nav.schemes}">[5] Schemes</span>
+        </div>
+        <div class="tile__body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{owner.scheme.field.name}">Scheme name</th>
+                        <th th:text="#{owner.scheme.key}">Key</th>
+                        <th th:text="#{owner.schemes.edit}">Edit</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="s : ${schemes}">
+                        <td th:text="${s.name}">Scheme</td>
+                        <td th:text="${s.schemeKey}">pmkisan</td>
+                        <td>
+                            <a class="btn btn--ghost"
+                               th:href="@{/owner/schemes/{key}(key=${s.schemeKey}, lang='en')}">EN</a>
+                            <a class="btn btn--ghost"
+                               th:href="@{/owner/schemes/{key}(key=${s.schemeKey}, lang='hi')}">हिं</a>
+                            <a class="btn btn--ghost"
+                               th:href="@{/owner/schemes/{key}(key=${s.schemeKey}, lang='mr')}">मरा</a>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: owner-schemes-list -->
+
+</th:block>
+
+</body>
+</html>

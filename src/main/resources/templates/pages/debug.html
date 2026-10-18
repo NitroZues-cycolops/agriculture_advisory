@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Owner-only one-stop debug screen. Shows the current session,
+            the application build and the weather scraper status, so that
+            when something breaks this is the first page to open.
+  ROUTE   : GET /debug   (DebugController.debug)   ROLE: OWNER only
+  LAYOUT  : layout-equal-grid -> equal 340px tiles plus one full-width table
+            tile for the scraper watch list.
+  DATA    : username, roles, appVersion, cacheRows, sampleRows, alertRows,
+            scrapeRows (List of DebugController.ScrapeRow),
+            runRows (List of DebugController.RunRow) - the last 20 refresh runs,
+            refreshCron, historyDays, stale - all supplied by DebugController.
+  PART A  : tile [3] carries the "Refresh now" button (POST /debug/refresh) and
+            the schedule/retention/staleness, tile [5] lists the recent runs.
+  If this breaks, check:
+    - 403 instead of this page -> the logged-in user is not the OWNER role.
+      SecurityConfig maps /debug/** to hasRole("OWNER").
+    - The watch-list table says "not run yet" -> the scheduled weather job has
+      not fired. It starts 20 seconds after boot, then repeats every 3 hours
+      (WeatherService.scheduledRefresh).
+    - Text shows as a missing key -> debug.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-equal-grid', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: debug-session | controller: DebugController.debug -->
+    <div class="tile" id="tile-debug-session" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{debug.session.title}">[1] Session Info</span>
+        </div>
+        <div class="tile__body">
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{debug.user}">User</span>
+                    <span th:text="${username}">owner</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.roles}">Roles</span>
+                    <span th:text="${roles}">[ROLE_OWNER]</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.language}">Language</span>
+                    <span th:text="${#locale}">en</span>
+                </li>
+            </ul>
+            <!-- Every inner page keeps a visible way back to the Home workspace. -->
+            <p style="margin-top:14px;">
+                <a class="btn" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: debug-session -->
+
+    <!-- TILE START: debug-app | controller: DebugController.debug -->
+    <div class="tile" id="tile-debug-app" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{debug.app.title}">[2] Application Info</span>
+        </div>
+        <div class="tile__body">
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{debug.version}">Version</span>
+                    <span th:text="${appVersion}">0.0.1-SNAPSHOT</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.environment}">Environment</span>
+                    <span th:text="#{debug.env.development}">Development</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <!-- TILE END: debug-app -->
+
+    <!-- TILE START: debug-cache | controller: DebugController.debug -->
+    <div class="tile" id="tile-debug-cache" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{debug.weather.title}">[3] Weather Scraper Status</span>
+        </div>
+        <div class="tile__body">
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{debug.cache.rows}">Cache rows</span>
+                    <span th:text="${cacheRows}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.cache.sample}">Seeded SAMPLE rows</span>
+                    <span th:text="${sampleRows}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.alerts.count}">Alert rows</span>
+                    <span th:text="${alertRows}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.schedule}">Daily refresh (cron)</span>
+                    <span th:text="${refreshCron}">0 0 6 * * *</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.retention}">History kept (days)</span>
+                    <span th:text="${historyDays}">30</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{debug.stale}">Data status</span>
+                    <span th:text="${stale} ? #{debug.stale.yes} : #{debug.stale.no}">Up to date</span>
+                </li>
+            </ul>
+
+            <!-- PART A: owner-only manual refresh. It is a real POST form, so
+                 Spring Security's CSRF token is included via th:action. The work
+                 runs in the background, hence the "reload in a moment" note. -->
+            <form th:action="@{/debug/refresh}" method="post" style="margin-top:14px;">
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{debug.refresh.button}">Refresh now</button>
+            </form>
+            <p class="alert alert--info" th:if="${param.refreshed != null}"
+               th:text="#{debug.refresh.started}">Refresh started in the background.</p>
+        </div>
+    </div>
+    <!-- TILE END: debug-cache -->
+
+    <!-- TILE START: debug-scraper | controller: DebugController.debug | full-width table -->
+    <div class="tile tile--span" id="tile-debug-scraper">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{debug.scraper.title}">[4] Weather watch list</span>
+        </div>
+        <div class="tile__body">
+
+            <!-- Never run yet: the scheduled job starts 20 s after boot. -->
+            <p class="card__text" th:if="${#lists.isEmpty(scrapeRows)}"
+               th:text="#{debug.scraper.none}">The scraper has not run yet.</p>
+
+            <div class="table-wrap" th:unless="${#lists.isEmpty(scrapeRows)}">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{debug.scraper.url}">URL</th>
+                        <th th:text="#{debug.scraper.source}">Source</th>
+                        <th th:text="#{debug.scraper.status}">Status</th>
+                        <th th:text="#{debug.scraper.last_success}">Last success</th>
+                        <th th:text="#{debug.scraper.rows}">Rows</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${scrapeRows}">
+                        <td class="table__url" th:text="${r.url()}">https://...</td>
+                        <td th:text="${r.source() != null} ? ${r.source()} : '—'">GREENALERTS</td>
+                        <td th:text="${r.status() != null} ? ${r.status()} : '—'">OK</td>
+                        <td th:text="${r.lastSuccess() != null} ? ${r.lastSuccess()} : #{nowcast.never}">Never</td>
+                        <td th:text="${r.rows()}">0</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: debug-scraper -->
+
+    <!-- TILE START: debug-runs | controller: DebugController.debug | PART A full-width table -->
+    <div class="tile tile--span" id="tile-debug-runs">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{debug.runs.title}">[5] Recent refresh runs</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(runRows)}"
+               th:text="#{debug.runs.none}">No refresh runs recorded yet.</p>
+
+            <div class="table-wrap" th:unless="${#lists.isEmpty(runRows)}">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{debug.runs.time}">Time</th>
+                        <th th:text="#{debug.runs.trigger}">Trigger</th>
+                        <th th:text="#{debug.runs.source}">Source</th>
+                        <th th:text="#{debug.runs.districts}">Districts</th>
+                        <th th:text="#{debug.runs.status}">Status</th>
+                        <th th:text="#{debug.runs.message}">Detail</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${runRows}">
+                        <td th:text="${r.when()}">18 Oct 2026, 06:00</td>
+                        <td th:text="${r.trigger()}">SCHEDULED</td>
+                        <td th:text="${r.source() != null} ? ${r.source()} : '—'">OPENMETEO</td>
+                        <td th:text="${r.districts()}">6 / 6</td>
+                        <td th:text="${r.status()}">OK</td>
+                        <td th:text="${r.message()}">source=OPENMETEO ...</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: debug-runs -->
+
+</th:block>
+
+</body>
+</html>

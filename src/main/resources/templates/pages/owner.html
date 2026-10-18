@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Owner panel (STEP 7). The five live counts, the labs waiting
+            for a decision (approve / reject) and shortcuts to the scheme
+            editor, community moderation and the scraper debug screen.
+  ROUTE   : GET  /owner                  -> OwnerController.dashboard
+            POST /owner/lab/{id}/approve -> OwnerController.approveLab
+            POST /owner/lab/{id}/reject  -> OwnerController.rejectLab
+  ROLE    : OWNER only (SecurityConfig maps /owner + /owner/** to that role)
+  LAYOUT  : layout-equal-grid -> a full-width header tile, one counts tile and
+            a full-width pending-labs table.
+  DATA    : farmers, labs, requests, reports, posts, pending (List of Lab),
+            pendingCount, param.saved
+  NO JAVASCRIPT : approve / reject are small POST forms (CSRF via th:action).
+  If this breaks, check:
+    - 403 instead of this page -> the logged-in user is not the OWNER role.
+    - A lab cannot log in after "Approve" -> labs.status must be APPROVED and
+      SecurityConfig must not be disabling the account.
+    - Text shows as a missing key -> owner.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-equal-grid', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: owner-header | controller: OwnerController.dashboard | full-width -->
+    <div class="tile tile--span" id="tile-owner-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{owner.title}">[1] Owner Panel</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{owner.title}">Owner Panel</h1>
+                <p class="page-head__sub" th:text="#{owner.intro}">Approve labs, edit scheme content and moderate the community.</p>
+            </div>
+
+            <div class="alert alert--success" th:if="${param.saved}"
+                 th:text="#{owner.saved}">Saved.</div>
+
+            <p class="btn-row" style="margin-top:12px;">
+                <a class="btn btn--ghost" th:href="@{/owner/schemes}" th:text="#{owner.link.schemes}">Edit schemes</a>
+                <a class="btn btn--ghost" th:href="@{/community}" th:text="#{owner.link.community}">Moderate community</a>
+                <a class="btn btn--ghost" th:href="@{/debug}" th:text="#{owner.link.debug}">Scraper status</a>
+                <a class="btn" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: owner-header -->
+
+    <!-- TILE START: owner-counts | controller: OwnerController.dashboard -->
+    <div class="tile" id="tile-owner-counts" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[7] ' + #{owner.counts.title}">[7] Platform counts</span>
+        </div>
+        <div class="tile__body">
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{owner.count.farmers}">Farmers</span>
+                    <span th:text="${farmers}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{owner.count.labs}">Labs</span>
+                    <span th:text="${labs}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{owner.count.requests}">Test requests</span>
+                    <span th:text="${requests}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{owner.count.reports}">Reports ready</span>
+                    <span th:text="${reports}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{owner.count.posts}">Community posts</span>
+                    <span th:text="${posts}">0</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <!-- TILE END: owner-counts -->
+
+    <!-- TILE START: owner-pending | controller: OwnerController.dashboard | full-width -->
+    <div class="tile tile--span" id="tile-owner-pending">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[8] ' + #{owner.pending.title}">[8] Labs waiting for approval</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(pending)}"
+               th:text="#{owner.pending.none}">No lab is waiting for approval.</p>
+
+            <div class="table-wrap" th:unless="${#lists.isEmpty(pending)}">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{owner.lab.name}">Lab</th>
+                        <th th:text="#{owner.lab.district}">District</th>
+                        <th th:text="#{owner.lab.status}">Status</th>
+                        <th th:text="#{owner.lab.decision}">Decision</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="lab : ${pending}">
+                        <td th:text="${lab.name}">Lab name</td>
+                        <td th:text="${lab.district}">Pune</td>
+                        <td th:text="${lab.status}">PENDING</td>
+                        <td>
+                            <form th:action="@{/owner/lab/{id}/approve(id=${lab.id})}" method="post"
+                                  style="display:inline;">
+                                <button type="submit" class="btn btn--primary"
+                                        th:text="#{owner.lab.approve}">Approve</button>
+                            </form>
+                            <form th:action="@{/owner/lab/{id}/reject(id=${lab.id})}" method="post"
+                                  style="display:inline;">
+                                <button type="submit" class="btn btn--danger"
+                                        th:text="#{owner.lab.reject}">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: owner-pending -->
+
+</th:block>
+
+</body>
+</html>

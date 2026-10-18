@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : The one shared page shell. Every page is rendered inside this
+            fragment using th:replace="~{layouts/main :: main(~{::content},
+            'layout-xxx', N)}".
+            It provides the top bar, the CSS Grid that fills the window,
+            and the thin footer strip. It does NOT draw tiles itself.
+  ROUTE   : serves all routes (it is the wrapper around every page)
+  DATA    : main(content, layoutClass, active)
+              content     = the calling page's tiles   (fragment ~{::content})
+              layoutClass = which layout to use, i.e. layout-home,
+                            layout-center, layout-master-stack,
+                            layout-equal-grid, layout-single
+              active      = workspace number 1-7 to highlight in the top bar
+                            (0 = no workspace, used by login/signup/errors)
+  If this breaks, check:
+    - Tiles not filling the window -> the page's 2nd main(...) argument does not
+      match a .layout-* class in style.css section 5.
+    - No glow on tiles -> style.css section 4.
+    - Text as a missing key -> the key is missing from messages*.properties.
+    - A page shows as ONE big tile with everything crammed inside -> the page
+      still wraps its tiles in a <div th:fragment="content">. It must use
+      <th:block th:fragment="content"> so the tiles become direct grid children.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:fragment="main(content, layoutClass, active)"
+      th:lang="${#locale.language}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{nav.app_name}">Precision Farming Advisory</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <!-- Fonts: Inter (body) + Poppins (headings) from the Bihar Mausam reference,
+         plus Noto Sans Devanagari so Hindi and Marathi render correctly. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Poppins:wght@700;900&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- TOP BAR: app name | workspaces 1-7 | language + user. One shared fragment. -->
+    <div th:replace="~{fragments/topbar :: topbar(${active})}"></div>
+
+    <!-- TILE AREA: the CSS Grid that fills everything below the top bar.
+         th:block (not a div) so the page's tiles land here as DIRECT grid
+         children and actually tile. -->
+    <main class="main-container" th:classappend="${layoutClass}">
+        <th:block th:replace="${content}"></th:block>
+    </main>
+
+    <!-- FOOTER STRIP -->
+    <footer class="app-footer" th:text="#{footer.text}">© 2026 Precision Farming Advisory Service | KJ Somaiya Institute of Technology</footer>
+
+</body>
+</html>

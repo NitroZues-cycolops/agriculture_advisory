@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Owner scheme editor (STEP 7). Edits ONE language of ONE scheme:
+            the name and the five text blocks shown on the public page.
+  ROUTE   : GET  /owner/schemes/{key}?lang=en -> OwnerController.editScheme
+            POST /owner/schemes/{key}          -> OwnerController.saveScheme
+  ROLE    : OWNER only
+  LAYOUT  : layout-home -> a full-width header tile (with the language tabs)
+            and a full-width form tile.
+  DATA    : scheme, lang (en/hi/mr), errors, param.saved
+  NO JAVASCRIPT : the language tabs are plain links.
+  If this breaks, check:
+    - Saved text does not appear on /schemes/{key} -> scheme_text row for that
+      scheme_id + lang was updated (unique key uq_scheme_lang).
+    - 404 -> the scheme key does not exist in the `schemes` table.
+    - Text shows as a missing key -> owner.scheme.* in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: owner-scheme-header | controller: OwnerController.editScheme | full-width -->
+    <div class="tile tile--span" id="tile-owner-scheme-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[8] ' + #{owner.scheme.title}">[8] Edit scheme</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{owner.scheme.title}">Edit scheme</h1>
+                <p class="page-head__sub" th:text="${scheme.schemeKey}">pmkisan</p>
+            </div>
+
+            <div class="alert alert--success" th:if="${param.saved}"
+                 th:text="#{owner.scheme.saved}">Your changes have been saved.</div>
+
+            <p style="margin-top:10px;">
+                <span class="label" th:text="#{owner.scheme.lang}">Language</span>
+                <a class="btn btn--ghost" th:classappend="${lang == 'en'} ? ' btn--primary'"
+                   th:href="@{/owner/schemes/{key}(key=${scheme.schemeKey}, lang='en')}">English</a>
+                <a class="btn btn--ghost" th:classappend="${lang == 'hi'} ? ' btn--primary'"
+                   th:href="@{/owner/schemes/{key}(key=${scheme.schemeKey}, lang='hi')}">हिंदी</a>
+                <a class="btn btn--ghost" th:classappend="${lang == 'mr'} ? ' btn--primary'"
+                   th:href="@{/owner/schemes/{key}(key=${scheme.schemeKey}, lang='mr')}">मराठी</a>
+            </p>
+            <p style="margin-top:6px;">
+                <a class="btn" th:href="@{/owner/schemes}" th:text="#{owner.schemes.title}">Government schemes</a>
+                <a class="btn" th:href="@{/owner}" th:text="#{owner.back}">Back to owner panel</a>
+                <a class="btn btn--ghost" th:href="@{/schemes/{key}(key=${scheme.schemeKey})}"
+                   th:text="#{owner.scheme.view}">View on the site</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: owner-scheme-header -->
+
+    <!-- TILE START: owner-scheme-form | controller: OwnerController.saveScheme | full-width -->
+    <div class="tile tile--span" id="tile-owner-scheme-form">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{owner.scheme.form}">[5] Scheme text</span>
+        </div>
+        <div class="tile__body">
+
+            <form th:action="@{/owner/schemes/{key}(key=${scheme.schemeKey})}" method="post">
+                <input type="hidden" name="lang" th:value="${lang}">
+
+                <div class="form-row">
+                    <label for="sc-name" th:text="#{owner.scheme.field.name}">Scheme name</label>
+                    <input type="text" id="sc-name" name="name" required maxlength="120"
+                           th:value="${scheme.name}"
+                           th:classappend="${errors['name'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['name'] != null}"
+                          th:text="#{error.required}">This field is required.</span>
+                </div>
+
+                <div class="form-row">
+                    <label for="sc-what" th:text="#{owner.scheme.field.what}">What it is</label>
+                    <textarea id="sc-what" name="what" th:text="${scheme.what}"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <label for="sc-who" th:text="#{owner.scheme.field.who}">Who is eligible</label>
+                    <textarea id="sc-who" name="who" th:text="${scheme.who}"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <label for="sc-docs" th:text="#{owner.scheme.field.docs}">Documents to carry</label>
+                    <textarea id="sc-docs" name="docs" th:text="${scheme.docs}"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <label for="sc-steps" th:text="#{owner.scheme.field.steps}">How to apply</label>
+                    <textarea id="sc-steps" name="steps" th:text="${scheme.steps}"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <label for="sc-where" th:text="#{owner.scheme.field.where}">Where to go</label>
+                    <textarea id="sc-where" name="where" th:text="${scheme.where}"></textarea>
+                </div>
+
+                <p class="btn-row" style="margin-top:10px;">
+                    <button type="submit" class="btn btn--primary"
+                            th:text="#{owner.scheme.save}">Save</button>
+                </p>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: owner-scheme-form -->
+
+</th:block>
+
+</body>
+</html>

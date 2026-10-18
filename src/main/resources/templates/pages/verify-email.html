@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Email verification (PART B, step 2) - OPTIONAL. It never blocks
+            login, so this page always offers a "skip" button. When SMTP is
+            configured a real email is sent; otherwise the link is shown in a
+            clearly labelled DEMO MODE box.
+  ROUTE   : GET  /verify/email?h=...         -> VerifyController.emailPage
+            POST /verify/email/resend        -> VerifyController.resendEmail
+            POST /verify/skip                -> VerifyController.skipEmail
+  ROLE    : public
+  LAYOUT  : layout-home -> header tile + .tile--form tile.
+  DATA    : h             -> one-time handle for the account
+            username      -> account name
+            email         -> the address on the account
+            emailVerified -> true when the address is already confirmed
+            realMail      -> true when a mail server is configured
+            notice        -> "link sent" message (optional)
+            demoLink      -> flash attribute: the link to click, DEMO ONLY
+  NO JAVASCRIPT - the demo link is a normal <a href>.
+  If this breaks, check:
+    - No demo link after clicking send -> the demoLink flash attribute is only
+      set when no JavaMailSender bean exists (spring.mail.host unset).
+    - "This link has expired" -> handle expired; register again or use /login.
+    - Untranslated text -> verify.email.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: verify-email-header | controller: VerifyController -->
+    <div class="tile tile--span" id="tile-verify-email-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{verify.title}">[1] Verify your account</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{verify.email.title}">Verify your email</h1>
+                <p class="page-head__sub" th:text="#{verify.email.intro}">
+                    Email verification is optional. You can log in without it.
+                </p>
+            </div>
+            <p class="form-hint" th:text="#{verify.blocked}">Login stays blocked until your phone is verified.</p>
+        </div>
+    </div>
+    <!-- TILE END: verify-email-header -->
+
+    <!-- TILE START: verify-email-form | controller: VerifyController -->
+    <div class="tile tile--form" id="tile-verify-email" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{verify.step.email}">[2] 2. Email (optional)</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="alert alert--success" th:if="${notice != null}">
+                <span aria-hidden="true">&#9989;</span>
+                <span th:text="${notice}">The verification link has been sent.</span>
+            </div>
+
+            <ul class="info-list">
+                <li>
+                    <span th:text="#{verify.phone.account}">Account</span>
+                    <strong th:text="${username}">farmer1</strong>
+                </li>
+                <li>
+                    <span th:text="#{verify.email.address}">Email address</span>
+                    <strong th:text="${email}">farmer1@example.com</strong>
+                </li>
+                <li>
+                    <span th:text="#{verify.email.status}">Status</span>
+                    <strong th:if="${emailVerified}" th:text="#{verify.email.verified}">Your email is verified.</strong>
+                    <strong th:unless="${emailVerified}" th:text="#{verify.email.notverified}">Not verified yet</strong>
+                </li>
+            </ul>
+
+            <!-- DEMO MODE box with the clickable link (only when no SMTP). -->
+            <div class="demo-box" th:if="${demoLink != null}">
+                <p class="demo-box__title" th:text="#{verify.email.demo.title}">DEMO MODE: no email is sent.</p>
+                <p th:text="#{verify.email.demo.body}">Open this link to verify your email:</p>
+                <p><a th:href="${demoLink}" th:text="#{verify.email.open}">Verify now</a></p>
+            </div>
+
+            <form th:action="@{/verify/email/resend}" method="post">
+                <input type="hidden" name="h" th:value="${h}">
+                <button type="submit" class="btn btn--primary btn--block"
+                        th:text="#{verify.email.send}">Send the verification link</button>
+            </form>
+
+            <form th:action="@{/verify/skip}" method="post">
+                <input type="hidden" name="h" th:value="${h}">
+                <button type="submit" class="btn btn--block"
+                        th:text="#{verify.email.skip}">Skip for now and log in</button>
+            </form>
+
+        </div>
+    </div>
+    <!-- TILE END: verify-email-form -->
+
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,1384 @@
+/* =====================================================================
+   PURPOSE : The single stylesheet for the Precision Farming Advisory Service.
+
+             THE LOOK comes from the Bihar Mausam reference portal
+             (./biharmausam.com - READ ONLY, never shipped with the app).
+             Only its visual language was taken: near-black navy background,
+             soft radial glows, Inter body text with Poppins headings, rounded
+             cards, soft wide shadows, uppercase letter-spaced navigation and
+             pill buttons. None of its code, images, icons or JavaScript are
+             used, and none of its files are copied into this project.
+
+             THE STRUCTURE is Hyprland tiling: every card is a "tile" with a
+             thin title bar showing "[2] Nowcast", a 1px border and a glowing
+             green-teal border on hover / keyboard focus. Tile numbers are the
+             same numbers as the top bar links.
+
+             ONE accent colour only: green-teal (#19d3b0).
+
+   USED BY : every page (linked from templates/layouts/main.html)
+   SEE ALSO: templates/layouts/main.html    (page shell + fonts)
+             templates/fragments/topbar.html (header + nav + language)
+             templates/fragments/tile.html   (reusable tile markup)
+   If this breaks, check:
+     - A card does not glow            -> section 4 (.tile:hover / :focus-within)
+     - Cards not centred / wrong count -> section 5 (.main-container and layout-*)
+     - The page scrolls as a whole     -> section 2 (body overflow)
+     - Broken layout on a phone        -> section 7 (the @media block)
+   SECTION MAP: 1 VARIABLES | 2 BASE | 3 TOP BAR | 4 TILE + CARD | 5 LAYOUTS
+                6 COMPONENTS | 7 RESPONSIVE
+   ===================================================================== */
+
+
+/* ========== 1. VARIABLES ========== */
+/* 1a. Palette ------------------------------------------------------------
+   The surfaces follow the Bihar Mausam dark theme; the accent is the single
+   Hyprland green-teal used for every highlight in the whole app. */
+:root {
+    /* surfaces */
+    --bg:            #0a1020;                  /* page background          */
+    --surface:       #111a2e;                  /* card background          */
+    --surface-2:     #14274a;                  /* icon circle, pill button */
+    --surface-3:     #0f172a;                  /* inputs, table stripes    */
+
+    /* lines */
+    --border:        rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+
+    /* the one accent */
+    --accent:        #19d3b0;                  /* green-teal               */
+    --accent-glow:   rgba(25, 211, 176, 0.35);
+    --accent-soft:   rgba(25, 211, 176, 0.12);
+
+    /* status colours (only for status text / left rules, never for decoration) */
+    --ok:            #22c55e;
+    --warn:          #f59e0b;
+    --danger:        #ef4444;
+
+    /* text */
+    --text:          #e8eefc;
+    --text-dim:      #b8c2d6;
+    --text-faint:    #7d8aa3;
+    --heading:       #ffffff;
+
+    /* geometry */
+    --gap:           24px;
+    --radius-card:   18px;
+    --radius-sm:     10px;
+    --radius-pill:   999px;
+    --shadow-card:   0 12px 30px rgba(0, 0, 0, 0.35);
+    --tap:           44px;                     /* minimum touch target     */
+
+    /* the faint dot grid drawn over the background */
+    --dot:           rgba(255, 255, 255, 0.06);
+
+    /* typography */
+    --font-body: 'Inter', 'Noto Sans Devanagari', 'Nirmala UI', system-ui, sans-serif;
+    --font-head: 'Poppins', 'Noto Sans Devanagari', 'Nirmala UI', system-ui, sans-serif;
+    --font-family: var(--font-body);           /* alias for older markup   */
+}
+
+
+/* ========== 2. BASE ========== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    height: 100%;
+}
+
+/* The desktop page never scrolls: only .main-container does.
+   Background = near-black navy + two soft radial glows + a faint dot grid. */
+body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(circle at 12% 0%,   rgba(124, 58, 237, 0.18), transparent 45%),
+        radial-gradient(circle at 88% 8%,   rgba(25, 211, 176, 0.14), transparent 45%),
+        radial-gradient(circle, var(--dot) 1px, transparent 1px);
+    background-size: auto, auto, 24px 24px;
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+h1, h2, h3, h4 {
+    font-family: var(--font-head);
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--heading);
+}
+
+h1 { font-size: 32px; }        /* the reference page title size */
+h2 { font-size: 20px; }        /* card title                    */
+h3 { font-size: 16px; }
+h4 { font-size: 14px; }
+
+p { margin-bottom: 8px; }
+
+/* Every interactive control is at least 44px tall (phone friendly). */
+.btn,
+button,
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+select,
+textarea {
+    min-height: var(--tap);
+    font-family: var(--font-body);
+    font-size: 15px;
+}
+
+button {
+    cursor: pointer;
+}
+
+/* Emoji are used as icons everywhere (no icon fonts, no images). */
+.emoji {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    line-height: 1;
+}
+
+
+/* ========== 3. TOP BAR ========== */
+/* Two rows, both on the dark navy surface: a centred title with the language
+   switcher / user on the right, then a centred uppercase row of numbered
+   workspace links. The current workspace gets a 3px green-teal underline. */
+.topbar {
+    flex: 0 0 auto;
+    background: rgba(10, 16, 32, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 20;
+}
+
+/* --- row 1: title centred, language + login on the right --- */
+.topbar__bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;   /* keeps the title truly centred */
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px 6px;
+}
+
+.topbar__title {
+    grid-column: 2;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 20px;
+    color: #fff;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.topbar__right {
+    grid-column: 3;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+/* --- row 2: the workspace links --- */
+.topbar__nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 12px 8px;
+}
+
+.workspace-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    border-radius: var(--radius-sm);
+    transition: color 0.25s ease;
+}
+
+.workspace-btn::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    transform: translateX(-50%);
+    width: 0;
+    height: 3px;                            /* the 3px active underline */
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.25s ease;
+}
+
+.workspace-btn:hover,
+.workspace-btn--active {
+    color: #fff;
+    text-decoration: none;
+}
+
+.workspace-btn:hover::after,
+.workspace-btn--active::after {
+    width: 80%;
+}
+
+.workspace-btn__num {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* --- language switcher --- */
+.lang-switcher {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-faint);
+}
+
+.lang-switcher a {
+    padding: 3px 7px;
+    color: var(--text-dim);
+    border-radius: 6px;
+}
+
+.lang-switcher a:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    text-decoration: none;
+}
+
+.topbar__user {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+/* small pill used by Logout / Login in the top bar */
+.topbar__right button,
+.topbar__right .btn {
+    min-height: 34px;
+    padding: 4px 14px;
+    font-family: var(--font-head);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #fff;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+}
+
+.topbar__right button:hover,
+.topbar__right .btn:hover {
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+    text-decoration: none;
+}
+
+/* checkbox that opens the phone menu (hidden on desktop) */
+.nav-toggle {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.nav-toggle-label {
+    display: none;
+}
+
+/* thin footer strip */
+.app-footer {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-faint);
+    background: rgba(10, 16, 32, 0.92);
+    border-top: 1px solid var(--border);
+}
+
+
+/* ========== 4. TILE + CARD ========== */
+/* A tile IS the card: dark surface, 1px border, 18px radius, soft shadow,
+   a thin title bar and a body that scrolls if the content is tall. */
+.tile {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    outline: none;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* ACTIVE TILE: mouse hover or keyboard focus (tiles carry tabindex="0"). */
+.tile:hover,
+.tile:focus,
+.tile:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow), var(--shadow-card);
+    transform: translateY(-2px);            /* the reference card lift */
+}
+
+/* the thin Hyprland title bar: "[2] Nowcast" */
+.tile__header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 14px;
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* only the inside of a tile scrolls */
+.tile__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 24px;
+    overflow: auto;
+}
+
+/* centred card body: emoji icon, title, description, pill button */
+.tile__body--center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    text-align: center;
+}
+
+/* the 76px circle holding a 36px emoji */
+.card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 76px;
+    flex: 0 0 auto;
+    font-size: 36px;
+    line-height: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.03);
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.tile:hover .card__icon,
+.tile:focus-within .card__icon {
+    transform: translateY(-4px) scale(1.08);
+}
+
+.card__title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--heading);
+}
+
+.card__text {
+    font-size: 15px;
+    color: var(--text-dim);
+}
+
+/* full-width pill button pinned to the bottom of the card */
+.card__btn {
+    width: 100%;
+    margin-top: auto;
+    min-height: var(--tap);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: color 0.25s ease, border-color 0.25s ease,
+                box-shadow 0.25s ease, background 0.25s ease;
+}
+
+/* the arrow on the pill (CSS only, no icon font) */
+.card__btn::after {
+    content: '\2192';
+    transition: transform 0.25s ease;
+}
+
+.tile:hover .card__btn::after {
+    transform: translateX(4px);
+}
+
+.card__btn:hover,
+.card__btn:focus {
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 14px var(--accent-glow);
+    background: var(--surface-2);
+    text-decoration: none;
+}
+
+
+/* ========== 5. LAYOUTS ========== */
+/* Every layout is a centred flex-wrap container: content-sized cards, never a
+   stretched empty tile.  .main-container is the only scrollable region. */
+.main-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--gap);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gap);
+    justify-content: center;
+    align-content: flex-start;
+    overflow: auto;
+}
+
+/* --- layout-home: header tile + one card per workspace (2-7).
+       max-width 1300px, 300px cards -> 4 per row, the rest centred. --- */
+.layout-home {
+    width: 100%;
+    max-width: 1300px;
+    margin: 0 auto;
+}
+
+.layout-home > .tile {
+    flex: 0 0 300px;
+    max-width: 320px;
+    min-height: 290px;
+}
+
+/* the header tile spans the whole row */
+.layout-home > .tile--span {
+    flex: 0 0 100%;
+    max-width: 100%;
+    min-height: 0;
+}
+
+/* a form tile inside layout-home has to be allowed to grow: ".layout-home >
+   .tile" above is more specific than plain ".tile--form", so without this rule
+   every registration / profile / lab form would be squashed into a 300px card. */
+.layout-home > .tile--form {
+    flex: 0 0 620px;
+    max-width: 680px;
+    min-height: 0;
+}
+
+/* PART C: the map canvas and its side tile share one row on a laptop. Same
+   specificity trap as .tile--form above - ".layout-home > .tile" would win. */
+.layout-home > .tile--map {
+    flex: 0 0 660px;
+    max-width: 900px;
+    min-height: 0;
+}
+
+.layout-home > .tile--side {
+    flex: 0 0 320px;
+    max-width: 380px;
+    min-height: 0;
+}
+
+/* --- layout-center: one centred tile, used by login, signup, coming soon.
+       Cards are content-sized, so a short message makes a short tile. --- */
+.layout-center {
+    align-content: center;
+}
+
+.layout-center > .tile {
+    flex: 0 0 420px;
+    max-width: 420px;
+}
+
+/* --- layout-single: one centred tile, used by the error pages --- */
+.layout-single {
+    align-content: center;
+}
+
+.layout-single > .tile {
+    flex: 0 0 560px;
+    max-width: 560px;
+}
+
+/* --- layout-equal-grid: equal tiles for the debug page and dashboards --- */
+.layout-equal-grid > .tile {
+    flex: 0 0 340px;
+    max-width: 360px;
+}
+
+/* --- form tiles: wider than a card so two fields fit side by side.
+       Used by /register, /register/lab and /profile. --- */
+.tile--form {
+    flex: 0 0 620px;
+    max-width: 680px;
+    min-height: 0;
+}
+
+/* a tile that should stretch across the whole row in any layout */
+.tile--span {
+    flex: 0 0 100%;
+    max-width: 100%;
+}
+
+
+/* ========== 6. COMPONENTS ========== */
+
+/* --- 6a. BUTTONS: pill buttons, uppercase and letter-spaced --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 24px;
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    transition: color 0.25s ease, border-color 0.25s ease,
+                box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.btn:hover,
+.btn:focus {
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 14px var(--accent-glow);
+    text-decoration: none;
+    outline: none;
+}
+
+.btn--primary {
+    color: #04241f;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.btn--primary:hover,
+.btn--primary:focus {
+    color: #04241f;
+    background: #21e8c3;
+    border-color: #21e8c3;
+    box-shadow: 0 0 18px var(--accent-glow);
+}
+
+.btn--ghost {
+    background: transparent;
+}
+
+.btn--block {
+    width: 100%;
+}
+
+.btn--danger {
+    color: #fff;
+    background: transparent;
+    border-color: var(--danger);
+}
+
+.btn--danger:hover,
+.btn--danger:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
+}
+
+/* row of buttons */
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+/* --- 6b. FORMS --- */
+.form-row {
+    margin-bottom: 14px;
+}
+
+.form-row label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+    width: 100%;
+    padding: 10px 12px;
+    color: var(--text);
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.form-row textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* an input that failed server-side validation */
+.form-row input.is-invalid,
+.form-row select.is-invalid,
+.form-row textarea.is-invalid {
+    border-color: var(--danger);
+}
+
+/* the per-field error text (already translated by the controller) */
+.form-error {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--danger);
+}
+
+.form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+/* two columns of fields side by side, collapsing to one on a phone */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+}
+
+.form-grid--full {
+    grid-column: 1 / -1;
+}
+
+/* a group of checkboxes (crops, sample types) */
+.check-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.check-grid label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+}
+
+.check-grid input[type="checkbox"] {
+    accent-color: var(--accent);
+}
+
+.check-grid label:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.auth-alt {
+    margin-top: 16px;
+    font-size: 13px;
+    text-align: center;
+    color: var(--text-dim);
+}
+
+/* --- 6c. MESSAGES / BANNERS --- */
+.alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    border-left: 4px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.alert--success { border-left-color: var(--ok); }
+.alert--warning { border-left-color: var(--warn); }
+.alert--severe  { border-left-color: var(--danger); }
+.alert--info    { border-left-color: var(--accent); }
+
+/* --- 6c-2. DEMO MODE BOX (PART B: OTP / email without a real provider) --- */
+.demo-box {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    border: 1px dashed var(--warn);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 200, 0, 0.06);
+}
+
+.demo-box__title {
+    margin: 0 0 6px;
+    font-weight: 600;
+    color: var(--warn);
+}
+
+.demo-box p {
+    margin: 0 0 4px;
+}
+
+.demo-box strong {
+    font-family: var(--font-mono, monospace);
+    font-size: 18px;
+    letter-spacing: 2px;
+}
+
+/* --- 6d. DEFINITION LIST (info panels, debug tiles) --- */
+.info-list {
+    list-style: none;
+}
+
+.info-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px dashed var(--border);
+}
+
+.info-list li:last-child {
+    border-bottom: none;
+}
+
+.info-list .label {
+    color: var(--text-dim);
+}
+
+/* --- 6e. TABLES (schemes, lab requests, owner panel) --- */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.table th,
+.table td {
+    padding: 9px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.table th {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+}
+
+.table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* A wide table (e.g. the /debug watch list) scrolls sideways inside its tile
+   instead of stretching the tile. */
+.table-wrap {
+    overflow-x: auto;
+}
+
+/* Long scraper URLs must wrap, not push the columns off the tile. */
+.table__url {
+    word-break: break-all;
+    max-width: 420px;
+    color: var(--text-dim);
+}
+
+/* --- 6f. SMALL PILLS / TAGS (status, sample type, crop) --- */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+}
+
+.tag--accent { color: var(--accent); border-color: var(--accent); }
+.tag--ok     { color: var(--ok);     border-color: var(--ok); }
+.tag--warn   { color: var(--warn);   border-color: var(--warn); }
+.tag--danger { color: var(--danger); border-color: var(--danger); }
+
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* --- 6g. LAB TRACKER (CSS-only stepper) --- */
+.stepper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0;
+    list-style: none;
+}
+
+.stepper__step {
+    flex: 1 1 110px;
+    padding: 8px 10px;
+    font-size: 12px;
+    text-align: center;
+    color: var(--text-faint);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.stepper__step--done {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* --- 6h. DEBUG / EXCEPTION OUTPUT --- */
+.debug-block {
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    background: #000;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+}
+
+/* --- 6i. SVG DISTRICT MAP (STEP 4 dot map -> PART C real district boundaries) ---
+   Every district is an SVG <path> inside an <a>; the colour comes from a
+   .band-* class (temperature / rain / wind) or a .crop-* class (crop map).
+   The heat layers draw interpolated <rect> cells UNDER the district borders. */
+.map-wrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.map-svg {
+    width: 100%;
+    height: auto;
+    max-height: 70vh;              /* never taller than the screen            */
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.map-svg .district {
+    fill: var(--band, #64748b);    /* the colour comes from a .band-*/.crop-* */
+    stroke: #06121f;
+    stroke-width: 0.8;
+    cursor: pointer;
+    transition: stroke-width 0.2s ease, stroke 0.2s ease;
+}
+
+.map-svg a:hover .district,
+.map-svg a:focus .district {
+    stroke: #fff;
+    stroke-width: 2.5;
+}
+
+/* The selected district is drawn last, so this outline is never covered. */
+.map-svg .district--selected {
+    stroke: #fff;
+    stroke-width: 3;
+}
+
+/* On a heat layer the polygons only carry the borders; the smooth colour
+   surface comes from the interpolated cells drawn underneath. */
+.map-svg .district--heat {
+    fill: none;
+    stroke: rgba(6, 18, 31, 0.8);
+}
+
+.map-svg .heat-cell {
+    fill: var(--band, #64748b);
+    stroke: none;
+}
+
+/* the heat surface never swallows a click meant for a district link */
+.map-svg .heat-layer {
+    pointer-events: none;
+}
+
+.map-svg .district-label {
+    font-family: var(--font-head);
+    font-size: 11px;
+    fill: #04121e;
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 2;
+    paint-order: stroke;
+    pointer-events: none;
+}
+
+/* The six data bands of the map, plus grey for "no reading yet".
+   Each class only sets one variable, so the SAME class paints an SVG shape
+   (fill) and an HTML legend swatch (background). */
+.band-0 { --band: #3b82f6; }   /* coldest / calmest                  */
+.band-1 { --band: #22d3ee; }
+.band-2 { --band: #19d3b0; }   /* the app accent colour, mid range   */
+.band-3 { --band: #a3e635; }
+.band-4 { --band: #f59e0b; }
+.band-5 { --band: #ef4444; }   /* hottest / windiest                 */
+.band-none { --band: #64748b; }
+
+/* The twelve crop colours of the crop map (PART C). Same --band variable, so
+   a district path and its legend swatch are always the same colour. */
+.crop-rice        { --band: #22d3ee; }
+.crop-wheat       { --band: #eab308; }
+.crop-sugarcane   { --band: #22c55e; }
+.crop-cotton      { --band: #e2e8f0; }
+.crop-soybean     { --band: #84cc16; }
+.crop-jowar       { --band: #f59e0b; }
+.crop-bajra       { --band: #fb923c; }
+.crop-onion       { --band: #a855f7; }
+.crop-grapes      { --band: #7c3aed; }
+.crop-pomegranate { --band: #ef4444; }
+.crop-mango       { --band: #f97316; }
+.crop-other       { --band: #64748b; }
+
+.map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.map-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.map-legend__swatch {
+    width: 14px;
+    height: 14px;
+    background: var(--band, #64748b);   /* same .band-* / .crop-* class */
+    border-radius: 4px;
+    border: 1px solid var(--border);
+}
+
+/* the map canvas is wide, its side tile is narrow - side by side on a laptop,
+   stacked on a phone (see the @media block in section 7) */
+.tile--map {
+    flex: 0 0 660px;
+    max-width: 900px;
+    min-height: 0;
+}
+
+.tile--side {
+    flex: 0 0 320px;
+    max-width: 380px;
+    min-height: 0;
+}
+
+/* --- 6j. 7-day forecast strip --- */
+.forecast-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.forecast-day {
+    flex: 1 1 130px;
+    padding: 12px;
+    text-align: center;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.forecast-day__name {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+}
+
+.forecast-day__temp {
+    font-family: var(--font-head);
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+}
+
+/* --- 6j2. PART D: forecast charts, advice line and the day table --- */
+
+/* The sky word under the date on each day card. */
+.forecast-day__cond {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+/* The one plain-language farming tip on a card. */
+.forecast-tip {
+    margin: 10px 0 8px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+}
+
+/* The two server-rendered charts. width:100% + height:auto keeps the whole
+   viewBox visible on a phone (scales down) and on a laptop (max-width). */
+.chart {
+    display: block;
+    width: 100%;
+    max-width: 760px;
+    height: auto;
+    margin: 0 auto 16px;
+    overflow: visible;
+}
+
+.chart-caption {
+    margin: 4px 0 6px;
+    font-family: var(--font-head);
+    font-size: 14px;
+    color: var(--heading);
+}
+
+.chart-legend {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.chart-key {
+    display: inline-block;
+    width: 12px;
+    height: 4px;
+    margin: 0 4px 0 12px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+.chart-key--max { background: var(--accent); }
+.chart-key--min { background: #60a5fa; }
+
+.chart-axis { stroke: var(--border-strong); stroke-width: 1; }
+.chart-axis-label { fill: var(--text-faint); font-size: 11px; }
+.chart-line { fill: none; stroke-width: 2.5; }
+.chart-line--max { stroke: var(--accent); }
+.chart-line--min { stroke: #60a5fa; }
+.chart-dot { stroke: var(--bg); stroke-width: 1.5; }
+.chart-dot--max { fill: var(--accent); }
+.chart-dot--min { fill: #60a5fa; }
+.chart-bar { fill: rgba(96, 165, 250, 0.65); }
+.chart-bar:hover { fill: var(--accent); }
+.chart-xlabel { fill: var(--text-faint); font-size: 11px; text-anchor: middle; }
+
+.day-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.day-table th,
+.day-table td {
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+}
+
+.day-table thead th {
+    color: var(--text-faint);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.day-table tbody th { color: var(--text); white-space: nowrap; }
+
+/* --- 6k. COMMUNITY --- */
+.post {
+    padding: 14px;
+    margin-bottom: 12px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.post__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.post__image {
+    max-width: 100%;
+    margin-top: 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.vote-form {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* --- 6l. SAMPLE DATA NOTICE --- */
+.sample-note {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--warn);
+    background: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid var(--warn);
+    border-radius: var(--radius-sm);
+}
+
+/* --- 6m. PAGE HEADER BLOCK used inside the home header tile --- */
+.page-head {
+    text-align: center;
+}
+
+.page-head__title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.page-head__sub {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--text-dim);
+}
+
+.page-head__cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+/* --- 6n. LAB PAGES (step 5): request cards, "labs near me", map frame --- */
+/* A responsive row of lab cards. auto-fit means no media query is needed:
+   4 across on a wide screen, 1 on a phone. */
+.lab-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--gap);
+    align-items: start;
+}
+
+.lab-card {
+    padding: 14px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.lab-card__name {
+    margin-bottom: 8px;
+    font-family: var(--font-head);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--heading);
+}
+
+/* The OpenStreetMap embed. It is a plain <iframe src="..."> - the map lives on
+   openstreetmap.org, so this project ships no map library and no JavaScript. */
+.lab-map {
+    width: 100%;
+    height: 200px;
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+}
+
+/* The editable measured values, two per row on a wide form tile. */
+.lab-result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+
+/* ========== 7. RESPONSIVE ========== */
+/* The flex-wrap layout already drops to 3 cards per row by itself; below
+   800px the cards stack in one column, the page scrolls and the navigation
+   collapses behind a CSS-only checkbox menu (no JavaScript). */
+@media (max-width: 800px) {
+
+    body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+    }
+
+    /* --- compact top bar --- */
+    .topbar__bar {
+        grid-template-columns: 1fr auto;
+        row-gap: 4px;
+    }
+
+    .topbar__title {
+        grid-column: 1;
+        text-align: left;
+        font-size: 16px;
+    }
+
+    .topbar__right {
+        grid-column: 2;
+    }
+
+    /* show the menu button */
+    .nav-toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: var(--tap);
+        padding: 0 12px;
+        color: #fff;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+    /* menu closed until the checkbox is ticked */
+    .topbar__nav {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .nav-toggle:checked ~ .topbar__nav {
+        display: flex;
+    }
+
+    .workspace-btn {
+        min-height: var(--tap);
+        justify-content: flex-start;
+    }
+
+    .workspace-btn::after {
+        display: none;
+    }
+
+    /* --- one column of content-sized cards --- */
+    .main-container {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 14px;
+        gap: 14px;
+    }
+
+    .layout-home > .tile,
+    .layout-home > .tile--span,
+    .layout-home > .tile--map,
+    .layout-home > .tile--side,
+    .layout-center > .tile,
+    .layout-single > .tile,
+    .layout-equal-grid > .tile,
+    .tile--form,
+    .tile--span {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 100%;
+        min-height: 0;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tile__body {
+        overflow: visible;      /* the page scrolls instead of the tile */
+    }
+}

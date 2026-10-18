@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Farmer self-registration (STEP 2). Three tiles: a header, the
+            account details and the farm details. Every label, option and
+            error message is a message key, so the page works in
+            English, Hindi and Marathi.
+  ROUTE   : GET  /register  -> RegisterController.form
+            POST /register  -> RegisterController.submit
+  ROLE    : public (SecurityConfig permits /register)
+  LAYOUT  : layout-home -> .tile--form tiles, 620px, two per row, centred.
+  DATA    : form          -> Map of the values the user typed (echoed on error)
+            errors        -> Map field -> already-translated error message
+            districts, crops, soils, irrigations, units, langs
+            selectedCrops -> List<String> of ticked crop codes (checkbox state)
+  NO JAVASCRIPT
+            The two tiles must submit as ONE form, but they are separate flex
+            children. That is done with the HTML5 `form="regForm"` attribute:
+            one hidden <form id="regForm"> (which also carries the CSRF token
+            from th:action) owns every input in both tiles.
+  If this breaks, check:
+    - "Invalid CSRF token" on submit -> this template must keep th:action on
+      the <form>, and that form must stay in the page (only display:none).
+    - A field loses its value after an error -> the input name does not match
+      the key the controller puts in `form`.
+    - An error text is missing -> the controller put a different field name in
+      `errors` than the one tested here.
+    - Untranslated text (a missing key) -> register.* / field.* / crop.* / soil.*
+      / irrigation.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- The single form that both tiles submit. display:none keeps it out of
+         the flex layout while it still owns every input via form="regForm".
+         th:action is what makes Spring Security add the CSRF hidden field. -->
+    <form id="regForm" th:action="@{/register}" method="post" style="display:none;"></form>
+
+    <!-- TILE START: register-header | controller: RegisterController -->
+    <div class="tile tile--span" id="tile-register-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[1] ' + #{register.title}">[1] Farmer Registration</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{register.title}">Farmer Registration</h1>
+                <p class="page-head__sub" th:text="#{register.intro}">Create your account and add your farm details.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: register-header -->
+
+    <!-- TILE START: register-account | controller: RegisterController -->
+    <div class="tile tile--form" id="tile-register-account" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{register.tile.account}">[2] Account details</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="form-row">
+                <label for="reg-username" th:text="#{field.username}">Username</label>
+                <input type="text" id="reg-username" name="username" form="regForm"
+                       autocomplete="username" required
+                       th:value="${form['username']}"
+                       th:classappend="${errors['username'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['username'] != null}"
+                      th:text="${errors['username']}">error</span>
+                <span class="form-hint" th:text="#{register.username.hint}">3-30 letters, digits, dot or underscore.</span>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="reg-password" th:text="#{field.password}">Password</label>
+                    <input type="password" id="reg-password" name="password" form="regForm"
+                           autocomplete="new-password" required
+                           th:classappend="${errors['password'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['password'] != null}"
+                          th:text="${errors['password']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="reg-confirm" th:text="#{field.confirm}">Confirm password</label>
+                    <input type="password" id="reg-confirm" name="confirm" form="regForm"
+                           autocomplete="new-password" required
+                           th:classappend="${errors['confirm'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['confirm'] != null}"
+                          th:text="${errors['confirm']}">error</span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="reg-email" th:text="#{field.email}">Email</label>
+                <input type="email" id="reg-email" name="email" form="regForm"
+                       autocomplete="email" required
+                       th:value="${form['email']}"
+                       th:classappend="${errors['email'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['email'] != null}"
+                      th:text="${errors['email']}">error</span>
+                <span class="form-hint" th:text="#{register.email.hint}">We send your verification link here.</span>
+            </div>
+
+            <div class="form-row">
+                <label for="reg-mobile" th:text="#{field.mobile}">Mobile number</label>
+                <input type="text" id="reg-mobile" name="mobile" form="regForm"
+                       inputmode="numeric" maxlength="10" required
+                       th:value="${form['mobile']}"
+                       th:classappend="${errors['mobile'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['mobile'] != null}"
+                      th:text="${errors['mobile']}">error</span>
+                <span class="form-hint" th:text="#{register.mobile.hint}">10 digits, starting with 6-9. We send the code by SMS to this number.</span>
+            </div>
+
+            <div class="form-row">
+                <label th:text="#{field.language}">Preferred language</label>
+                <div class="check-grid">
+                    <label th:each="code : ${langs}">
+                        <input type="radio" name="lang" form="regForm" th:value="${code}"
+                               th:checked="${form['lang'] != null ? form['lang'] == code : code == 'en'}">
+                        <span th:text="${#messages.msg('lang.' + code)}">English</span>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <!-- TILE END: register-account -->
+
+    <!-- TILE START: register-farm | controller: RegisterController -->
+    <div class="tile tile--form" id="tile-register-farm" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{register.tile.farm}">[3] Farm details</span>
+        </div>
+        <div class="tile__body">
+
+            <div class="form-row">
+                <label th:text="#{field.state}">State</label>
+                <input type="text" th:value="#{register.state}" readonly>
+                <input type="hidden" name="state" form="regForm" value="Maharashtra">
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="reg-district" th:text="#{field.district}">District</label>
+                    <select id="reg-district" name="district" form="regForm" required
+                            th:classappend="${errors['district'] != null} ? ' is-invalid'">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="d : ${districts}" th:value="${d.nameEn}"
+                                th:selected="${form['district'] == d.nameEn}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                    <span class="form-error" th:if="${errors['district'] != null}"
+                          th:text="${errors['district']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="reg-taluka" th:text="#{field.taluka}">Taluka</label>
+                    <input type="text" id="reg-taluka" name="taluka" form="regForm" required
+                           th:value="${form['taluka']}"
+                           th:classappend="${errors['taluka'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['taluka'] != null}"
+                          th:text="${errors['taluka']}">error</span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="reg-village" th:text="#{field.village}">Village</label>
+                <input type="text" id="reg-village" name="village" form="regForm" required
+                       th:value="${form['village']}"
+                       th:classappend="${errors['village'] != null} ? ' is-invalid'">
+                <span class="form-error" th:if="${errors['village'] != null}"
+                      th:text="${errors['village']}">error</span>
+            </div>
+
+            <div class="form-row">
+                <label th:text="#{field.crops}">Crops grown</label>
+                <div class="check-grid">
+                    <label th:each="c : ${crops}">
+                        <input type="checkbox" name="crops" form="regForm" th:value="${c}"
+                               th:checked="${selectedCrops.contains(c)}">
+                        <span th:text="${#messages.msg('crop.' + c)}">Rice</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="reg-area" th:text="#{field.area}">Farm area</label>
+                    <input type="number" id="reg-area" name="area" form="regForm"
+                           step="0.01" min="0.01" required
+                           th:value="${form['area']}"
+                           th:classappend="${errors['area'] != null} ? ' is-invalid'">
+                    <span class="form-error" th:if="${errors['area'] != null}"
+                          th:text="${errors['area']}">error</span>
+                </div>
+                <div class="form-row">
+                    <label for="reg-unit" th:text="#{field.unit}">Unit</label>
+                    <select id="reg-unit" name="unit" form="regForm">
+                        <option th:each="u : ${units}" th:value="${u}"
+                                th:selected="${form['unit'] == u}"
+                                th:text="${#messages.msg('unit.' + u)}">acre</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="reg-soil" th:text="#{field.soil}">Soil type</label>
+                    <select id="reg-soil" name="soil" form="regForm">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="s : ${soils}" th:value="${s}"
+                                th:selected="${form['soil'] == s}"
+                                th:text="${#messages.msg('soil.' + s)}">Black</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="reg-irrigation" th:text="#{field.irrigation}">Irrigation</label>
+                    <select id="reg-irrigation" name="irrigation" form="regForm">
+                        <option value="" th:text="#{register.choose}">-- choose --</option>
+                        <option th:each="i : ${irrigations}" th:value="${i}"
+                                th:selected="${form['irrigation'] == i}"
+                                th:text="${#messages.msg('irrigation.' + i)}">Drip</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="reg-description" th:text="#{field.description}">Short description</label>
+                <textarea id="reg-description" name="description" form="regForm"
+                          th:text="${form['description']}"></textarea>
+            </div>
+
+            <p class="btn-row" style="margin-top:10px;">
+                <button type="submit" form="regForm" class="btn btn--primary"
+                        th:text="#{register.submit}">Create account</button>
+                <a class="btn" th:href="@{/signup}" th:text="#{common.back}">Back</a>
+            </p>
+
+            <p class="auth-alt">
+                <span th:text="#{auth.signup.have_account}">Already have an account?</span>
+                <a th:href="@{/login}" th:text="#{auth.login}">Login</a>
+            </p>
+
+        </div>
+    </div>
+    <!-- TILE END: register-farm -->
+
+</th:block>
+
+</body>
+</html>

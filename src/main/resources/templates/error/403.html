@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : 403 Access Denied page, styled in the same tile layout.
+  ROUTE   : GET /error   (CustomErrorController, when status = 403)
+  LAYOUT  : layout-single -> one tile filling the window.
+  DATA    : none. `active` is 0 because the user is not in a workspace.
+  If this breaks, check:
+    - Farmer sees this page for /debug -> that role is wrong on purpose;
+      SecurityConfig only allows ROLE_OWNER on /debug/**
+    - Text shows as a missing key -> error.403.* keys in messages.properties.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-single', 0)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: error-403 | controller: CustomErrorController -->
+    <div class="tile" id="tile-error-403" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[!] ' + #{error.403.title}">[!] 403 - Access Denied</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">⛔</span>
+            <h2 th:text="#{error.403.heading}">Access Denied!</h2>
+            <p th:text="#{error.403.message}">You do not have permission to open this page.</p>
+            <a class="btn btn--primary" th:href="@{/}" th:text="#{common.back_home}">Back to Home</a>
+        </div>
+    </div>
+    <!-- TILE END: error-403 -->
+
+</th:block>
+
+</body>
+</html>

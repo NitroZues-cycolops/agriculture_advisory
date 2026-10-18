@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : The lab's own dashboard (workspace 4) - STEP 5. Lists every
+            request sent to THIS lab, lets the lab move a request one stage
+            forward, and lets it enter or correct the measured values.
+  ROUTE   : GET  /lab/dashboard          -> LabDashboardController.dashboard
+            POST /lab/dashboard/advance  -> LabDashboardController.advance
+            POST /lab/dashboard/result   -> LabDashboardController.saveResult
+  ROLE    : LAB only (SecurityConfig maps /lab/dashboard/** to hasRole("LAB"))
+            and only for the requests of the lab belonging to this user.
+  LAYOUT  : layout-home -> a full-width header with the counts, then one
+            full-width tile per request.
+  DATA    : lab, labName, queue (List<QueueRow>: request + result + next),
+            total, openCount, readyCount, saved, track, form, errors
+  NO JAVASCRIPT : both actions are normal POST forms with th:action, so the
+            CSRF token is included; the tracker is styled CSS.
+  If this breaks, check:
+    - 403 -> the logged-in user is not the LAB role, or the account has no
+      row in `labs` (register once at /register/lab).
+    - A request is missing -> it belongs to another lab. The lab id always
+      comes from the session, never from the form.
+    - Text as a missing key -> lab.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 4)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: labdash-header | controller: LabDashboardController.dashboard | full-width -->
+    <div class="tile tile--span" id="tile-labdash-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[4] ' + #{lab.dash.title}">[4] Lab dashboard</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="${labName}">Lab</h1>
+                <p class="page-head__sub" th:text="#{lab.dash.intro}">Requests sent to your lab.</p>
+            </div>
+
+            <p class="tags" style="justify-content:center;">
+                <span class="tag" th:text="${#messages.msg('lab.dash.counts') + ': ' + total}">Requests: 0</span>
+                <span class="tag tag--warn" th:text="${#messages.msg('lab.dash.pending') + ': ' + openCount}">Open: 0</span>
+                <span class="tag tag--ok" th:text="${#messages.msg('lab.dash.ready') + ': ' + readyCount}">Ready: 0</span>
+            </p>
+
+            <div class="alert alert--success" th:if="${saved}">
+                <span aria-hidden="true">✅</span>
+                <span th:text="${#messages.msg('lab.dash.saved') + ' ' + saved}">Saved</span>
+            </div>
+
+            <p style="margin-top:14px;text-align:center;">
+                <a class="btn" th:href="@{/lab}" th:text="#{lab.dash.farmer_view}">See the farmer's lab page</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: labdash-header -->
+
+    <p class="card__text" th:if="${#lists.isEmpty(queue)}"
+       th:text="#{lab.dash.none}">No request has been sent to your lab yet.</p>
+
+    <!-- TILE START: labdash-request | controller: LabDashboardController | one per request -->
+    <div class="tile tile--span" th:each="row : ${queue}"
+         th:id="${'tile-lab-req-' + row.request.id}">
+
+        <div class="tile__header">
+            <span class="tile__title"
+                  th:text="${'[4] ' + row.request.trackingId + ' - ' + row.request.farmerName}">[4] TRK-1001</span>
+        </div>
+        <div class="tile__body">
+
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{lab.form.farmer}">Farmer</span>
+                    <span th:text="${row.request.farmerName}">farmer1</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.form.sample}">Sample</span>
+                    <span th:text="${#messages.msg('sample.' + #strings.toLowerCase(row.request.sampleType))}">Soil</span>
+                </li>
+                <li th:if="${row.request.crop != null}">
+                    <span class="label" th:text="#{lab.form.crop}">Crop</span>
+                    <span th:text="${#messages.msg('crop.' + #strings.toLowerCase(row.request.crop))}">Rice</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.created}">Requested on</span>
+                    <span th:text="${#temporals.format(row.request.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{lab.field.status}">Status</span>
+                    <span th:text="${#messages.msg(row.request.stage().messageKey())}">Request Submitted</span>
+                </li>
+                <li th:if="${row.request.notes != null}">
+                    <span class="label" th:text="#{lab.form.notes}">Notes for the lab</span>
+                    <span th:text="${row.request.notes}">-</span>
+                </li>
+            </ul>
+
+            <!-- Where this request is right now. -->
+            <ol class="stepper">
+                <li class="stepper__step" th:each="stage : ${row.request.stages()}"
+                    th:classappend="${stage.isDoneAt(row.request.stage())} ? ' stepper__step--done'"
+                    th:text="${#messages.msg(stage.messageKey())}">Request Submitted</li>
+            </ol>
+
+            <!-- Move the request exactly one stage forward. The controller asks
+                 LabStatus.next() what that stage is, so it cannot skip a step. -->
+            <th:block th:if="${row.next != null}">
+                <form th:action="@{/lab/dashboard/advance}" method="post"
+                      th:id="${'advance-' + row.request.id}">
+                    <input type="hidden" name="requestId" th:value="${row.request.id}">
+                    <div class="form-row">
+                        <label th:text="#{lab.dash.note}">Note (optional)</label>
+                        <input type="text" name="note" maxlength="500">
+                        <span class="form-hint" th:text="#{lab.dash.advance_hint}">The note is added to the status history.</span>
+                    </div>
+                    <button class="btn btn--primary" type="submit"
+                            th:text="${#messages.msg('lab.dash.advance') + ': ' + #messages.msg(row.next.messageKey())}">Advance</button>
+                </form>
+            </th:block>
+            <p class="card__text" th:if="${row.next == null}"
+               th:text="#{lab.dash.finished}">This request has reached the last stage.</p>
+
+            <hr style="margin:16px 0;border:0;border-top:1px solid var(--border);">
+
+            <!-- Enter or correct the measured values. Everything is optional, so
+                 a lab can save a partly finished form and complete it later. -->
+            <h2 class="card__title" th:text="#{lab.dash.result_title}">Test result</h2>
+            <form th:action="@{/lab/dashboard/result}" method="post"
+                  th:id="${'result-' + row.request.id}">
+                <input type="hidden" name="requestId" th:value="${row.request.id}">
+
+                <div class="lab-result-grid">
+                    <div class="form-row">
+                        <label th:text="#{lab.result.ph}">pH</label>
+                        <input type="number" step="0.01" min="0" name="ph"
+                               th:classappend="${errors['ph'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['ph'] : row.result?.ph}">
+                        <span class="form-error" th:if="${errors['ph'] != null}" th:text="${errors['ph']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label th:text="#{lab.result.n}">Nitrogen (N)</label>
+                        <input type="number" step="0.01" min="0" name="nitrogen"
+                               th:classappend="${errors['nitrogen'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['nitrogen'] : row.result?.nitrogen}">
+                        <span class="form-error" th:if="${errors['nitrogen'] != null}" th:text="${errors['nitrogen']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label th:text="#{lab.result.p}">Phosphorus (P)</label>
+                        <input type="number" step="0.01" min="0" name="phosphorus"
+                               th:classappend="${errors['phosphorus'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['phosphorus'] : row.result?.phosphorus}">
+                        <span class="form-error" th:if="${errors['phosphorus'] != null}" th:text="${errors['phosphorus']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label th:text="#{lab.result.k}">Potassium (K)</label>
+                        <input type="number" step="0.01" min="0" name="potassium"
+                               th:classappend="${errors['potassium'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['potassium'] : row.result?.potassium}">
+                        <span class="form-error" th:if="${errors['potassium'] != null}" th:text="${errors['potassium']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label th:text="#{lab.result.oc}">Organic carbon</label>
+                        <input type="number" step="0.01" min="0" name="organicCarbon"
+                               th:classappend="${errors['organicCarbon'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['organicCarbon'] : row.result?.organicCarbon}">
+                        <span class="form-error" th:if="${errors['organicCarbon'] != null}" th:text="${errors['organicCarbon']}">error</span>
+                    </div>
+                    <div class="form-row">
+                        <label th:text="#{lab.result.ec}">Electrical conductivity</label>
+                        <input type="number" step="0.01" min="0" name="electricalConductivity"
+                               th:classappend="${errors['electricalConductivity'] != null} ? ' is-invalid'"
+                               th:value="${form['requestId'] != null and form['requestId'] == row.request.id
+                                           ? form['electricalConductivity'] : row.result?.electricalConductivity}">
+                        <span class="form-error" th:if="${errors['electricalConductivity'] != null}"
+                              th:text="${errors['electricalConductivity']}">error</span>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label th:text="#{lab.result.remarks}">Remarks</label>
+                    <textarea name="remarks" maxlength="500"
+                              th:classappend="${errors['remarks'] != null} ? ' is-invalid'"
+                              th:text="${form['requestId'] != null and form['requestId'] == row.request.id
+                                        ? form['remarks'] : row.result?.remarks}"></textarea>
+                    <span class="form-error" th:if="${errors['remarks'] != null}" th:text="${errors['remarks']}">error</span>
+                </div>
+
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{lab.result.save}">Save result</button>
+            </form>
+
+            <!-- The status history is the proof of what happened and when. -->
+            <h2 class="card__title" style="margin-top:16px;" th:text="#{lab.tracker.history}">Status history</h2>
+            <ul class="info-list">
+                <li th:each="e : ${row.history}">
+                    <span class="label" th:text="${#temporals.format(e.changedAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                    <span>
+                        <span th:text="${#messages.msg(e.messageKey())}">Sample Received</span>
+                        <span th:if="${e.note != null}" th:text="${' - ' + e.note}"> - note</span>
+                    </span>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <!-- TILE END: labdash-request -->
+
+</th:block>
+
+</body>
+</html>

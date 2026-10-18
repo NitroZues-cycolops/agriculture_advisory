@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : One government scheme guide (workspace 5) - STEP 3. Shows what
+            the scheme is, who is eligible, documents to carry, the steps,
+            where to go and the official link - all in the active language.
+  ROUTE   : GET /schemes/{key}   (SchemesController.detail)
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a full-width header tile, then 620px content tiles
+            (two per row, one per row on a phone).
+  DATA    : scheme -> Scheme with the full text for the active language
+  NO JAVASCRIPT : the text is read from the `scheme_text` DB table, so the
+            OWNER can edit it in STEP 7. Only the section labels are message
+            keys (schemes.detail.*).
+  If this breaks, check:
+    - A section is empty -> `scheme_text` has no row for that scheme and
+      language (data_new.sql seeds en / hi / mr).
+    - 404 instead of the page -> the {key} is not a `schemes.scheme_key`.
+    - a missing key text -> schemes.detail.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 5)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: scheme-detail-header | controller: SchemesController.detail | full-width -->
+    <div class="tile tile--span" id="tile-scheme-detail-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + ${scheme.name}">[5] Scheme</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="${scheme.name}">PM-KISAN</h1>
+                <p class="page-head__sub" th:text="#{schemes.detail.disclaimer}">Simplified guide - verify on the official portal.</p>
+                <div class="page-head__cta">
+                    <a class="btn" th:href="@{/schemes}" th:text="#{schemes.detail.back}">Back to all schemes</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-header -->
+
+    <!-- TILE START: scheme-detail-what | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-what" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.what}">[5] What is it</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.what}">What is it</h3>
+            <p th:text="${scheme.what}">description</p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-what -->
+
+    <!-- TILE START: scheme-detail-who | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-who" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.who}">[5] Who is eligible</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.who}">Who is eligible</h3>
+            <p th:text="${scheme.who}">eligibility</p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-who -->
+
+    <!-- TILE START: scheme-detail-docs | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-docs" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.docs}">[5] Documents to carry</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.docs}">Documents to carry</h3>
+            <p th:text="${scheme.docs}">documents</p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-docs -->
+
+    <!-- TILE START: scheme-detail-steps | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-steps" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.steps}">[5] Steps</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.steps}">Steps</h3>
+            <p th:text="${scheme.steps}">steps</p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-steps -->
+
+    <!-- TILE START: scheme-detail-where | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-where" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.where}">[5] Where to go</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.where}">Where to go</h3>
+            <p th:text="${scheme.where}">offices</p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-where -->
+
+    <!-- TILE START: scheme-detail-official | controller: SchemesController.detail -->
+    <div class="tile tile--form" id="tile-scheme-detail-official" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[5] ' + #{schemes.detail.official}">[5] Official website</span>
+        </div>
+        <div class="tile__body">
+            <h3 th:text="#{schemes.detail.official}">Official website</h3>
+            <p>
+                <a th:if="${scheme.officialLink != null}" th:href="${scheme.officialLink}"
+                   target="_blank" rel="noopener noreferrer" th:text="${scheme.officialLink}">link</a>
+                <span th:if="${scheme.officialLink == null}" th:text="#{schemes.notfound.message}">no link</span>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: scheme-detail-official -->
+
+</th:block>
+
+</body>
+</html>

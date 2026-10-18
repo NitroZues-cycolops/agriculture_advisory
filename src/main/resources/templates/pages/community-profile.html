@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : A farmer's community profile - STEP 6. The saved farm details,
+            a follow / message strip and that farmer's posts.
+  ROUTE   : GET /community/profile/{id}   -> CommunityController.profile
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a profile tile and a posts tile.
+  DATA    : member, posts, following, self, followerCount, followingCount,
+            postCount, role, unread
+  NO JAVASCRIPT : follow/unfollow are POST forms.
+  If this breaks, check:
+    - 404 -> there is no user with that id.
+    - "no profile yet" -> the farmer never saved their profile.
+    - Text as a missing key -> community.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commprof-header | controller: CommunityController.profile -->
+    <div class="tile tile--form" id="tile-commprof-header" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.profile.title}">[6] Farm profile</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="${member.displayName()}">Farmer</h1>
+                <p class="page-head__sub" th:text="${'@' + member.username}">@farmer1</p>
+            </div>
+
+            <p class="card__text" th:unless="${member.hasProfile}"
+               th:text="#{community.profile.none}">No profile details yet.</p>
+
+            <ul class="info-list" th:if="${member.hasProfile}">
+                <li th:if="${member.district != null}">
+                    <span class="label" th:text="#{community.profile.district}">District</span>
+                    <span th:text="${member.district}">Pune</span>
+                </li>
+                <li th:if="${member.taluka != null}">
+                    <span class="label" th:text="#{community.profile.taluka}">Block</span>
+                    <span th:text="${member.taluka}">Haveli</span>
+                </li>
+                <li th:if="${member.village != null}">
+                    <span class="label" th:text="#{community.profile.village}">Village</span>
+                    <span th:text="${member.village}">Wagholi</span>
+                </li>
+                <li th:if="${member.crops != null}">
+                    <span class="label" th:text="#{community.profile.crops}">Crops</span>
+                    <span>
+                        <span class="tag" th:each="c : ${#strings.arraySplit(member.crops, ',')}"
+                              th:text="${#messages.msg('crop.' + #strings.trim(c))}">Rice</span>
+                    </span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{community.profile.area}">Farm area</span>
+                    <span th:text="${member.farmArea + ' ' + member.unit}">3.5 acre</span>
+                </li>
+            </ul>
+
+            <ul class="info-list" style="margin-top:10px;">
+                <li>
+                    <span class="label" th:text="#{community.profile.posts_label}">Posts</span>
+                    <span th:text="${postCount}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{community.profile.followers}">Followers</span>
+                    <span th:text="${followerCount}">0</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{community.profile.following}">Following</span>
+                    <span th:text="${followingCount}">0</span>
+                </li>
+            </ul>
+
+            <div class="btn-row" th:unless="${self}" style="margin-top:10px;">
+                <form th:if="${!following}"
+                      th:action="@{/community/follow/{id}(id=${member.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/community/profile/' + member.userId}">
+                    <button type="submit" class="btn btn--ghost" th:text="#{community.follow}">Follow</button>
+                </form>
+                <form th:if="${following}"
+                      th:action="@{/community/unfollow/{id}(id=${member.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/community/profile/' + member.userId}">
+                    <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
+                </form>
+                <a class="btn btn--primary" th:href="@{/community/messages/{id}(id=${member.userId})}"
+                   th:text="#{community.profile.message}">Send a message</a>
+            </div>
+
+            <p style="margin-top:12px;">
+                <a class="card__btn" th:href="@{/community}" th:text="#{community.back}">Back to community</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: commprof-header -->
+
+    <!-- TILE START: commprof-posts | controller: CommunityController.profile | full-width -->
+    <div class="tile tile--span" id="tile-commprof-posts">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.posts.title(${member.displayName()})}">[6] Posts</span>
+        </div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${#lists.isEmpty(posts)}"
+               th:text="#{community.empty}">No posts yet.</p>
+
+            <div class="post" th:each="p : ${posts}">
+                <div class="post__meta">
+                    <span th:text="${#temporals.format(p.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+                <p class="card__text" th:text="${p.content}">A post.</p>
+                <img class="post__image" th:if="${p.hasImage}"
+                     th:src="@{/community/image/{id}(id=${p.id})}"
+                     th:alt="#{community.image.alt}">
+                <p style="margin-top:8px;">
+                    <a th:href="@{/community/post/{id}(id=${p.id})}"
+                       th:text="#{community.post.comments(${p.commentCount})}">0 comments</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: commprof-posts -->
+
+</th:block>
+
+</body>
+</html>

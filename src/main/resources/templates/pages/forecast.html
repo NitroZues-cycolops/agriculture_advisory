@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : 7-day outlook (workspace 3) - PART D. Three readable views of the
+            SAME seven days, all read from the weather_forecast table:
+              1. one card per day  - the sky word, max/min, rain with its own
+                 unit, humidity, wind and ONE plain-language farming tip;
+              2. two SVG charts drawn on the SERVER (temperature lines + rain
+                 bars) - no JavaScript anywhere;
+              3. a compact day-by-day table for anyone who prefers numbers.
+  ROUTE   : GET /forecast   (WeatherController.forecast)
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a full-width header tile, a small district picker
+            card and three full-width tiles (cards / charts / table).
+  DATA    : districts    -> all 36 districts for the picker
+            selectedCode -> district code currently shown
+            selectedName -> its name in the active language
+            days         -> List<WeatherDay>, one row per day, from the cache
+            cards        -> List<ForecastCard>, the same days already worded
+            tempMarks / rainBars / chartMaxPoints / chartMinPoints
+                         -> the two charts, already projected to SVG pixels
+            chartW/H/Pad/Slot/Base/High/Low/RainMax -> the chart geometry
+            taluka       -> the watched block the rows belong to, or null
+  NO JAVASCRIPT : the picker is a normal GET form; both charts are plain SVG
+            the server wrote.
+  If this breaks, check:
+    - "No forecast rows are stored" -> weather_forecast has no future rows for
+      that district. The scheduled job writes them, or data_new.sql seeds SAMPLE
+      ones for the six watched blocks only.
+    - A card shows a raw weekday word -> forecast.weekday.* keys in all four files.
+    - Text as a missing key -> forecast.* keys in all four files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 3)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: forecast-header | controller: WeatherController.forecast | full-width -->
+    <div class="tile tile--span" id="tile-forecast-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{nav.forecast}">[3] Forecast</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{forecast.title}">7-day forecast</h1>
+                <p class="page-head__sub" th:text="#{forecast.intro}">The stored outlook for one district.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: forecast-header -->
+
+    <!-- TILE START: forecast-picker | controller: WeatherController.targetDistrict -->
+    <div class="tile" id="tile-forecast-picker" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{nowcast.pick}">[3] Choose a district</span>
+        </div>
+        <div class="tile__body">
+            <form th:action="@{/forecast}" method="get">
+                <div class="form-row">
+                    <label for="district" th:text="#{nowcast.pick}">Choose a district</label>
+                    <select id="district" name="district">
+                        <option th:each="d : ${districts}"
+                                th:value="${d.code()}"
+                                th:selected="${d.code() == selectedCode}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                </div>
+                <button class="btn btn--primary btn--block" type="submit"
+                        th:text="#{nowcast.show}">Show</button>
+            </form>
+
+            <ul class="info-list" style="margin-top:12px;">
+                <li>
+                    <span class="label" th:text="#{nowcast.district}">District</span>
+                    <span th:text="${selectedName}">Raigad</span>
+                </li>
+                <li th:if="${taluka != null}">
+                    <span class="label" th:text="#{nowcast.taluka}">Block</span>
+                    <span th:text="${taluka}">Panvel</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{forecast.day_count}">Days stored</span>
+                    <span th:text="${#lists.size(days)}">7</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{nowcast.last_updated}">Last updated</span>
+                    <span th:text="${lastUpdated != null} ? ${lastUpdated} : #{nowcast.never}">18 Oct 2026, 10:30</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{weather.source}">Source</span>
+                    <span th:text="${source != null} ? ${source} : #{nowcast.never}">GREENALERTS</span>
+                </li>
+            </ul>
+
+            <p><a class="card__btn" th:href="@{/nowcast(district=${selectedCode})}"
+                  th:text="#{forecast.open_nowcast}">See today</a></p>
+        </div>
+    </div>
+    <!-- TILE END: forecast-picker -->
+
+    <!-- TILE START: forecast-cards | controller: WeatherController.forecast | full-width -->
+    <div class="tile tile--span" id="tile-forecast-cards">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{forecast.cards.title}">[3] Day by day</span>
+        </div>
+        <div class="tile__body">
+            <!-- SAMPLE warning only when the rows were not produced by a real
+                 source, so the demo never presents seeded numbers as real. -->
+            <p class="sample-note" th:if="${!#lists.isEmpty(cards) and cards[0].sample()}"
+               th:text="#{forecast.sample}">SAMPLE forecast rows.</p>
+
+            <div class="forecast-strip" th:if="${!#lists.isEmpty(cards)}">
+                <div class="forecast-day" th:each="c : ${cards}">
+                    <div class="forecast-day__name" th:text="${c.weekday()}">Sunday</div>
+                    <div class="forecast-day__name" th:text="${c.dateText()}">2026-10-18</div>
+                    <div class="forecast-day__cond" th:text="${#messages.msg(c.conditionKey())}">Clear sky</div>
+                    <div class="forecast-day__temp"
+                         th:text="${c.tempMax() != null} ? ${c.tempMax()} : '—'">33 °C</div>
+                    <ul class="info-list">
+                        <li th:if="${c.tempMin() != null}">
+                            <span class="label" th:text="#{forecast.min}">Min</span>
+                            <span th:text="${c.tempMin()}">24 °C</span>
+                        </li>
+                        <li th:if="${c.rainValue() != null}">
+                            <span class="label" th:text="${#messages.msg(c.rainLabelKey())}">Rain chance</span>
+                            <span th:text="${c.rainValue()}">45 %</span>
+                        </li>
+                        <li th:if="${c.humidity() != null}">
+                            <span class="label" th:text="#{forecast.humidity}">Humidity</span>
+                            <span th:text="${c.humidity()}">70 %</span>
+                        </li>
+                        <li th:if="${c.wind() != null}">
+                            <span class="label" th:text="#{forecast.wind}">Wind</span>
+                            <span th:text="${c.wind()}">8 km/h</span>
+                        </li>
+                    </ul>
+                    <p class="forecast-tip">
+                        <span class="label" th:text="#{forecast.advice}">Field advice</span>
+                        <span th:text="${#messages.msg(c.tipKey())}">A good day for field work.</span>
+                    </p>
+                    <span class="tag" th:text="${c.source()}">SAMPLE</span>
+                </div>
+            </div>
+
+            <p class="card__text" th:if="${#lists.isEmpty(cards)}"
+               th:text="#{forecast.empty}">No forecast rows are stored for this district yet.</p>
+        </div>
+    </div>
+    <!-- TILE END: forecast-cards -->
+
+    <!-- TILE START: forecast-chart | controller: WeatherController.addChart | full-width -->
+    <div class="tile tile--span" id="tile-forecast-chart">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{forecast.chart.title}">[3] At a glance</span>
+        </div>
+        <div class="tile__body">
+            <p class="card__text" th:if="${chartDays == 0}" th:text="#{forecast.empty}">No forecast rows yet.</p>
+
+            <th:block th:if="${chartDays > 0}">
+                <h3 class="chart-caption" th:text="#{forecast.chart.temp}">Daily temperature</h3>
+                <p class="chart-legend">
+                    <span class="chart-key chart-key--max"></span>
+                    <span th:text="#{forecast.chart.high}">High</span>
+                    <span class="chart-key chart-key--min"></span>
+                    <span th:text="#{forecast.chart.low}">Low</span>
+                </p>
+                <svg class="chart" role="img" th:aria-label="#{forecast.chart.temp}"
+                     th:attr="viewBox=${'0 0 ' + chartW + ' ' + chartH}">
+                    <text class="chart-axis-label" x="4" y="26"
+                          th:text="${chartHigh} + ' °C'">35 °C</text>
+                    <text class="chart-axis-label" x="4" th:attr="y=${chartBase}"
+                          th:text="${chartLow} + ' °C'">22 °C</text>
+                    <line class="chart-axis"
+                          th:attr="x1=${chartPad},y1=${chartBase},x2=${chartW - 16},y2=${chartBase}"></line>
+                    <polyline class="chart-line chart-line--max" th:attr="points=${chartMaxPoints}"></polyline>
+                    <polyline class="chart-line chart-line--min" th:attr="points=${chartMinPoints}"></polyline>
+                    <circle class="chart-dot chart-dot--max" th:each="m : ${tempMarks}"
+                            th:attr="cx=${m.x()},cy=${m.yMax()}">
+                        <title th:text="${m.maxText()}">33 °C</title>
+                    </circle>
+                    <circle class="chart-dot chart-dot--min" th:each="m : ${tempMarks}"
+                            th:attr="cx=${m.x()},cy=${m.yMin()}">
+                        <title th:text="${m.minText()}">24 °C</title>
+                    </circle>
+                    <text class="chart-xlabel" th:each="c, it : ${cards}"
+                          th:attr="x=${chartPad + chartSlot * it.index + chartSlot / 2},y=${chartH - 6}"
+                          th:text="${c.weekday()}">Mon</text>
+                </svg>
+
+                <h3 class="chart-caption" th:text="#{forecast.chart.rain}">Rain</h3>
+                <svg class="chart" role="img" th:aria-label="#{forecast.chart.rain}"
+                     th:attr="viewBox=${'0 0 ' + chartW + ' ' + chartH}">
+                    <text class="chart-axis-label" x="4" y="26"
+                          th:text="'0 - ' + ${chartRainMax}">0 - 60</text>
+                    <line class="chart-axis"
+                          th:attr="x1=${chartPad},y1=${chartBase},x2=${chartW - 16},y2=${chartBase}"></line>
+                    <rect class="chart-bar" th:each="b : ${rainBars}"
+                          th:attr="x=${b.x()},y=${b.y()},width=${b.w()},height=${b.h()}">
+                        <title th:text="${b.text()}">45 %</title>
+                    </rect>
+                    <text class="chart-xlabel" th:each="c, it : ${cards}"
+                          th:attr="x=${chartPad + chartSlot * it.index + chartSlot / 2},y=${chartH - 6}"
+                          th:text="${c.weekday()}">Mon</text>
+                </svg>
+            </th:block>
+        </div>
+    </div>
+    <!-- TILE END: forecast-chart -->
+
+    <!-- TILE START: forecast-table | controller: WeatherController.forecast | full-width -->
+    <div class="tile tile--span" id="tile-forecast-table">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[3] ' + #{forecast.table.title}">[3] Day by day</span>
+        </div>
+        <div class="tile__body">
+            <table class="day-table">
+                <thead>
+                <tr>
+                    <th scope="col" th:text="#{forecast.table.day}">Day</th>
+                    <th scope="col" th:text="#{forecast.table.condition}">Sky</th>
+                    <th scope="col" th:text="#{forecast.max}">Max</th>
+                    <th scope="col" th:text="#{forecast.min}">Min</th>
+                    <th scope="col" th:text="#{forecast.rain}">Rain</th>
+                    <th scope="col" th:text="#{forecast.humidity}">Humidity</th>
+                    <th scope="col" th:text="#{forecast.wind}">Wind</th>
+                    <th scope="col" th:text="#{forecast.table.tip}">Field advice</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="c : ${cards}">
+                    <th scope="row" th:text="${c.weekday()} + ' ' + ${c.dateText()}">Sun 2026-10-18</th>
+                    <td th:text="${#messages.msg(c.conditionKey())}">Clear sky</td>
+                    <td th:text="${c.tempMax() != null} ? ${c.tempMax()} : '—'">33 °C</td>
+                    <td th:text="${c.tempMin() != null} ? ${c.tempMin()} : '—'">24 °C</td>
+                    <td th:text="${c.rainValue() != null} ? ${c.rainValue()} : '—'">45 %</td>
+                    <td th:text="${c.humidity() != null} ? ${c.humidity()} : '—'">70 %</td>
+                    <td th:text="${c.wind() != null} ? ${c.wind()} : '—'">8 km/h</td>
+                    <td th:text="${#messages.msg(c.tipKey())}">A good day for field work.</td>
+                </tr>
+                <tr th:if="${#lists.isEmpty(cards)}">
+                    <td colspan="8" th:text="#{forecast.empty}">No forecast rows are stored for this district yet.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <!-- TILE END: forecast-table -->
+
+</th:block>
+
+</body>
+</html>

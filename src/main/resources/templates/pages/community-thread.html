@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : One private conversation (workspace 6) - STEP 6.
+  ROUTE   : GET  /community/messages/{id}   -> CommunityController.thread
+            POST /community/messages/{id}   -> CommunityController.send
+  ROLE    : any authenticated user (only the two people in the thread)
+  LAYOUT  : layout-home -> the message list and a send form.
+  DATA    : other, thread, me, role, unread
+  NO JAVASCRIPT : a normal POST form; refreshing the page shows new messages.
+  If this breaks, check:
+    - Messages not delivered -> direct_messages rows (sender_id, receiver_id).
+    - Text as a missing key -> community.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commthread-body | controller: CommunityController.thread | full-width -->
+    <div class="tile tile--span" id="tile-commthread-body">
+        <div class="tile__header">
+            <span class="tile__title"
+                  th:text="'[6] ' + #{community.thread.title(${other.displayName()})}">[6] Conversation</span>
+        </div>
+        <div class="tile__body">
+
+            <p style="margin-bottom:12px;">
+                <a class="card__btn" th:href="@{/community/messages}" th:text="#{community.inbox}">Inbox</a>
+                <a class="card__btn" th:href="@{/community/profile/{id}(id=${other.userId})}"
+                   th:text="#{community.profile.title}">Farm profile</a>
+            </p>
+
+            <p class="card__text" th:if="${#lists.isEmpty(thread)}"
+               th:text="#{community.thread.empty}">No messages yet - write the first one.</p>
+
+            <div class="post" th:each="msg : ${thread}">
+                <div class="post__meta">
+                    <span th:if="${msg.senderId == me}" th:text="#{community.thread.you}">You</span>
+                    <span th:if="${msg.senderId != me}" th:text="${other.displayName()}">Farmer</span>
+                    <span th:text="${#temporals.format(msg.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+                <p class="card__text" th:text="${msg.content}">message</p>
+            </div>
+
+            <form th:action="@{/community/messages/{id}(id=${other.userId})}" method="post"
+                  style="margin-top:12px;">
+                <div class="form-row">
+                    <label for="content" th:text="#{community.thread.type}">Your message</label>
+                    <textarea id="content" name="content" maxlength="1000" required></textarea>
+                </div>
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{community.thread.send}">Send</button>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: commthread-body -->
+
+</th:block>
+
+</body>
+</html>

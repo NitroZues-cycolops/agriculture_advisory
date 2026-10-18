@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : Current conditions (workspace 2) - STEP 4. Shows the newest
+            reading from weather_cache for one district, plus the
+            personalised alerts that the crop + forecast rules produced.
+  ROUTE   : GET /nowcast   (WeatherController.nowcast)
+  ROLE    : any authenticated user
+  LAYOUT  : layout-home -> a full-width header tile, then a district picker,
+            the current-conditions card and the alerts card, centred.
+  DATA    : districts      -> all 36 districts for the picker
+            selectedCode   -> district code currently shown
+            selectedName   -> its name in the active language
+            reading        -> WeatherReading from the cache, or null
+            lastUpdated    -> "dd MMM yyyy, HH:mm" string, or null
+            farmerDistrict -> true when this is the farmer's own district
+            personalAlerts -> alerts raised by the rules for this farmer
+            generalAlerts  -> notices that are not personalised
+  NO JAVASCRIPT : the district picker is a normal GET form. This page NEVER
+            calls the internet - it only reads weather_cache, so it cannot
+            hang or fail while the college wifi is down.
+  If this breaks, check:
+    - Every district says "no reading yet" -> WeatherService has not run yet
+      (it starts 20 seconds after boot). Check /debug, or run data_new.sql.
+    - No personalised alerts -> the farmer needs a district saved in /profile;
+      alerts are also only raised when a rule actually matches the forecast.
+    - Text as a missing key -> nowcast.* and alert.* keys in all 4 files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 2)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: nowcast-header | controller: WeatherController.nowcast | full-width -->
+    <div class="tile tile--span" id="tile-nowcast-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nav.nowcast}">[2] Nowcast</span>
+        </div>
+        <div class="tile__body">
+            <div class="page-head">
+                <h1 class="page-head__title" th:text="#{nowcast.title}">Current conditions</h1>
+                <p class="page-head__sub" th:text="#{nowcast.intro}">The latest stored reading for one district.</p>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: nowcast-header -->
+
+    <!-- TILE START: nowcast-picker | controller: WeatherController.targetDistrict -->
+    <div class="tile" id="tile-nowcast-picker" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nowcast.pick}">[2] Choose a district</span>
+        </div>
+        <div class="tile__body">
+            <!-- A plain GET form: no JavaScript, and the URL keeps the choice
+                 (?district=raigad), so the page can be bookmarked. -->
+            <form th:action="@{/nowcast}" method="get">
+                <div class="form-row">
+                    <label for="district" th:text="#{nowcast.pick}">Choose a district</label>
+                    <select id="district" name="district">
+                        <option th:each="d : ${districts}"
+                                th:value="${d.code()}"
+                                th:selected="${d.code() == selectedCode}"
+                                th:text="${d.nameFor(#locale.language)}">Raigad</option>
+                    </select>
+                </div>
+                <button class="btn btn--primary btn--block" type="submit"
+                        th:text="#{nowcast.show}">Show</button>
+            </form>
+
+            <p class="tag tag--accent" style="margin-top:12px;"
+               th:if="${farmerDistrict}" th:text="#{nowcast.farmer_district}">Your district</p>
+
+            <p style="margin-top:12px;">
+                <a class="card__btn" th:href="@{/map(district=${selectedCode})}"
+                   th:text="#{nowcast.open_map}">Open the district map</a>
+            </p>
+        </div>
+    </div>
+    <!-- TILE END: nowcast-picker -->
+
+    <!-- TILE START: nowcast-current | controller: WeatherController.nowcast -->
+    <div class="tile" id="tile-nowcast-current" tabindex="0" th:if="${reading != null}">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nowcast.current.title}">[2] Current conditions</span>
+        </div>
+        <div class="tile__body">
+            <h2 class="card__title" th:text="${selectedName}">Raigad</h2>
+            <p class="tags">
+                <span class="tag" th:text="${reading.source}">SAMPLE</span>
+                <span class="tag" th:if="${reading.taluka != null}" th:text="${reading.taluka}">Panvel</span>
+                <span class="tag tag--warn" th:if="${reading.sample}" th:text="#{nowcast.sample_badge}">SAMPLE</span>
+            </p>
+
+            <ul class="info-list">
+                <li>
+                    <span class="label" th:text="#{nowcast.temp}">Temperature</span>
+                    <span th:text="${reading.temperature != null} ? ${reading.temperature} : '—'">30 °C</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{nowcast.rain}">Rain</span>
+                    <span th:text="${reading.rain != null} ? ${reading.rain} : '—'">0 mm</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{nowcast.humidity}">Humidity</span>
+                    <span th:text="${reading.humidity != null} ? ${reading.humidity} : '—'">65 %</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{nowcast.wind}">Wind</span>
+                    <span th:text="${reading.wind != null} ? ${reading.wind} : '—'">6 km/h</span>
+                </li>
+                <li th:if="${reading.summary != null}">
+                    <span class="label" th:text="#{nowcast.summary}">Sky</span>
+                    <span th:text="${reading.summary}">Cloudy</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{nowcast.last_updated}">Last updated</span>
+                    <span th:text="${lastUpdated != null} ? ${lastUpdated} : #{nowcast.never}">18 Oct 2026, 10:30</span>
+                </li>
+                <li>
+                    <span class="label" th:text="#{weather.source}">Source</span>
+                    <span th:text="${source != null} ? ${source} : #{nowcast.never}">GREENALERTS</span>
+                </li>
+            </ul>
+
+            <p class="sample-note" th:if="${reading.sample}" th:text="#{nowcast.sample_note}">SAMPLE reading.</p>
+        </div>
+    </div>
+    <!-- TILE END: nowcast-current -->
+
+    <!-- TILE START: nowcast-empty | controller: WeatherController.nowcast -->
+    <div class="tile" id="tile-nowcast-empty" tabindex="0" th:if="${reading == null}">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nowcast.current.title}">[2] Current conditions</span>
+        </div>
+        <div class="tile__body tile__body--center">
+            <span class="card__icon" aria-hidden="true">📡</span>
+            <h2 class="card__title" th:text="${selectedName}">Raigad</h2>
+            <p class="card__text" th:text="#{nowcast.no_data}">No reading is stored for this district yet.</p>
+        </div>
+    </div>
+    <!-- TILE END: nowcast-empty -->
+
+    <!-- TILE START: nowcast-alerts | controller: WeatherController.addAlerts -->
+    <div class="tile" id="tile-nowcast-alerts" tabindex="0">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[2] ' + #{nowcast.alerts.title}">[2] Alerts</span>
+        </div>
+        <div class="tile__body">
+            <h2 class="card__title" th:text="#{nowcast.alerts.personal}">For your crops</h2>
+
+            <!-- Personalised alerts. The row stores a message KEY, and
+                 #messages.msg resolves it in the language of this request, so
+                 the same row reads correctly in English, Hindi and Marathi. -->
+            <div class="alert" th:each="a : ${personalAlerts}"
+                 th:classappend="${a.severityClass()}">
+                <span aria-hidden="true">⚠️</span>
+                <span>
+                    <strong th:text="${#messages.msg(a.titleKey)}">Heat warning</strong><br>
+                    <span th:text="${#messages.msg(a.messageKey)}">Message</span>
+                </span>
+            </div>
+            <p class="card__text" th:if="${#lists.isEmpty(personalAlerts)}"
+               th:text="#{nowcast.alerts.none}">No alerts for your farm right now.</p>
+
+            <!-- General notices, shown separately from the personalised ones. -->
+            <h2 class="card__title" style="margin-top:16px;"
+                th:text="#{nowcast.alerts.general}">General notices</h2>
+            <div class="alert alert--info" th:each="a : ${generalAlerts}">
+                <span aria-hidden="true">📢</span>
+                <span>
+                    <strong th:text="${#messages.msg(a.titleKey)}">Notice</strong><br>
+                    <span th:text="${#messages.msg(a.messageKey)}">Message</span>
+                </span>
+            </div>
+            <p class="card__text" th:if="${#lists.isEmpty(generalAlerts)}"
+               th:text="#{nowcast.alerts.no_general}">No general notices right now.</p>
+
+            <p><a class="btn btn--ghost" th:href="@{/forecast(district=${selectedCode})}"
+                  th:text="#{nowcast.open_forecast}">Open the 7-day forecast</a></p>
+        </div>
+    </div>
+    <!-- TILE END: nowcast-alerts -->
+
+</th:block>
+
+</body>
+</html>

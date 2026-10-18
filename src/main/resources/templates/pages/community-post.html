@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<!--
+  =====================================================================
+  PURPOSE : One community post with its comments - STEP 6.
+  ROUTE   : GET  /community/post/{id}           -> CommunityController.post
+            POST /community/post/{id}/comment   -> CommunityController.comment
+            POST /community/post/{id}/vote      -> CommunityController.vote
+            POST /community/post/{id}/delete    -> CommunityController.deletePost
+  ROLE    : any authenticated user (owner gets Delete)
+  LAYOUT  : layout-home -> the post tile, a comment tile and a comment form.
+  DATA    : post, comments, author, following, role, unread, form, errors
+  NO JAVASCRIPT : votes and comments are POST forms.
+  If this breaks, check:
+    - 404 -> the post was deleted, or the id does not exist.
+    - Text as a missing key -> community.* keys in all four message files.
+  =====================================================================
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layouts/main :: main(~{::content}, 'layout-home', 6)}">
+<body>
+
+<th:block th:fragment="content">
+
+    <!-- TILE START: commpost-header | controller: CommunityController.post | full-width -->
+    <div class="tile tile--span" id="tile-commpost-header">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.tile.post}">[6] Post</span>
+        </div>
+        <div class="tile__body">
+            <a class="card__btn" th:href="@{/community}" th:text="#{community.back}">Back to community</a>
+
+            <div class="post" style="margin-top:12px;">
+                <div class="post__meta">
+                    <a th:href="@{/community/profile/{id}(id=${post.userId})}"
+                       th:text="${post.authorName}">Farmer</a>
+                    <span th:if="${post.authorDistrict != null}" th:text="${post.authorDistrict}">Pune</span>
+                    <span th:text="${#temporals.format(post.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+
+                <p class="card__text" th:text="${post.content}">A post.</p>
+                <img class="post__image" th:if="${post.hasImage}"
+                     th:src="@{/community/image/{id}(id=${post.id})}"
+                     th:alt="#{community.image.alt}">
+
+                <div class="post__meta" style="margin-top:8px; align-items:center;">
+                    <form class="vote-form" th:action="@{/community/post/{id}/vote(id=${post.id})}" method="post">
+                        <input type="hidden" name="vote" value="UP">
+                        <button type="submit" class="btn btn--ghost"
+                                th:classappend="${post.myVote == 'UP'} ? ' btn--primary'"
+                                th:text="${'▲ ' + post.upVotes}">▲ 0</button>
+                    </form>
+                    <form class="vote-form" th:action="@{/community/post/{id}/vote(id=${post.id})}" method="post">
+                        <input type="hidden" name="vote" value="DOWN">
+                        <button type="submit" class="btn btn--ghost"
+                                th:classappend="${post.myVote == 'DOWN'} ? ' btn--primary'"
+                                th:text="${'▼ ' + post.downVotes}">▼ 0</button>
+                    </form>
+                    <span class="tag" th:text="#{community.post.score(${post.score})}">0</span>
+
+                    <form th:if="${role == 'OWNER'}"
+                          th:action="@{/community/post/{id}/delete(id=${post.id})}" method="post"
+                          style="display:inline;">
+                        <button type="submit" class="btn btn--danger"
+                                th:text="#{community.delete}">Delete</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Follow / message the author (not offered for your own post). -->
+            <div class="btn-row" th:if="${author != null and !(post.userId == me)}" style="margin-top:10px;">
+                <form th:if="${!following}" th:action="@{/community/follow/{id}(id=${post.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/community/post/' + post.id}">
+                    <button type="submit" class="btn btn--ghost" th:text="#{community.follow}">Follow</button>
+                </form>
+                <form th:if="${following}" th:action="@{/community/unfollow/{id}(id=${post.userId})}" method="post">
+                    <input type="hidden" name="back" th:value="${'/community/post/' + post.id}">
+                    <button type="submit" class="btn btn--ghost" th:text="#{community.unfollow}">Unfollow</button>
+                </form>
+                <a class="btn btn--ghost" th:href="@{/community/messages/{id}(id=${post.userId})}"
+                   th:text="#{community.message}">Message</a>
+            </div>
+        </div>
+    </div>
+    <!-- TILE END: commpost-header -->
+
+    <!-- TILE START: commpost-comments | controller: CommunityController.post | full-width -->
+    <div class="tile tile--span" id="tile-commpost-comments">
+        <div class="tile__header">
+            <span class="tile__title" th:text="'[6] ' + #{community.comment.title}">[6] Comments</span>
+        </div>
+        <div class="tile__body">
+
+            <p class="card__text" th:if="${#lists.isEmpty(comments)}"
+               th:text="#{community.comment.none}">No comments yet.</p>
+
+            <div class="post" th:each="c : ${comments}">
+                <div class="post__meta">
+                    <a th:href="@{/community/profile/{id}(id=${c.userId})}"
+                       th:text="${c.authorName}">Farmer</a>
+                    <span th:text="${#temporals.format(c.createdAt, 'dd MMM yyyy, HH:mm')}">18 Oct 2026</span>
+                </div>
+                <p class="card__text" th:text="${c.content}">A comment.</p>
+            </div>
+
+            <form th:action="@{/community/post/{id}/comment(id=${post.id})}" method="post"
+                  style="margin-top:12px;">
+                <div class="form-row">
+                    <label for="content" th:text="#{community.comment.new}">Add a comment</label>
+                    <textarea id="content" name="content" maxlength="500" required></textarea>
+                </div>
+                <button class="btn btn--primary" type="submit"
+                        th:text="#{community.comment.submit}">Comment</button>
+            </form>
+        </div>
+    </div>
+    <!-- TILE END: commpost-comments -->
+
+</th:block>
+
+</body>
+</html>
