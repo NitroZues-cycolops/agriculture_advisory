@@ -15,7 +15,7 @@ mysql -uadvisory -padvisory123 advisory_db -e "SELECT COUNT(*) FROM users; SELEC
 
 # full end-to-end proof (boot the app on a free port first)
 bash smoke_test.sh http://localhost:8091
-```
+```command:workbench.action.openSettings?%5B%22chat.sessionSync.enabled%22%5D
 
 ---
 
