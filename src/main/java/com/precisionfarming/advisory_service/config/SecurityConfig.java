@@ -30,7 +30,6 @@ public class SecurityConfig implements WebMvcConfigurer {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/", "/signup", "/login", "/register", "/register/lab",
-                                 "/verify", "/verify/**",
                                  "/css/**", "/images/**").permitAll()
                 .requestMatchers("/debug/**").hasRole("OWNER")
                 .requestMatchers("/owner", "/owner/**").hasRole("OWNER")
@@ -66,11 +65,9 @@ public class SecurityConfig implements WebMvcConfigurer {
             .map(u -> User.withUsername(u.getUsername())
                 .password(u.getPassword())
                 .roles(u.getRole())
-                // A LAB account may log in only after the owner has APPROVED it.
-                // Until then the account is disabled, so Spring Security rejects
-                // the login (DisabledException) instead of letting a PENDING lab
-                // into the dashboard.
-                .disabled(labNotApproved(u, labDao) || phoneNotVerified(u))
+                // Only lab approval remains as a security gate. Phone and email
+                // verification are fully disabled by product requirement.
+                .disabled(labNotApproved(u, labDao))
                 .build())
             .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
@@ -81,16 +78,6 @@ public class SecurityConfig implements WebMvcConfigurer {
                 && !labDao.findByUserId(u.getId())
                         .map(l -> "APPROVED".equals(l.getStatus()))
                         .orElse(false);
-    }
-
-    /**
-     * PART B: a self-registered FARMER or LAB may not log in until the phone on
-     * the account is verified. The seeded demo accounts are marked verified in
-     * data_new.sql, so they keep working. The owner account is not affected.
-     */
-    private static boolean phoneNotVerified(com.precisionfarming.advisory_service.model.User u) {
-        return !u.isPhoneVerified()
-                && ("FARMER".equals(u.getRole()) || "LAB".equals(u.getRole()));
     }
 
     @Bean

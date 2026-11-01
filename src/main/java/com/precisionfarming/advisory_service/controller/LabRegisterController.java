@@ -6,8 +6,6 @@ import com.precisionfarming.advisory_service.model.User;
 import com.precisionfarming.advisory_service.repository.DistrictDao;
 import com.precisionfarming.advisory_service.repository.LabDao;
 import com.precisionfarming.advisory_service.repository.UserRepository;
-import com.precisionfarming.advisory_service.service.OtpService;
-import com.precisionfarming.advisory_service.service.VerificationSessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
@@ -40,19 +38,14 @@ public class LabRegisterController {
     private final DistrictDao districts;
     private final PasswordEncoder encoder;
     private final MessageSource messages;
-    private final OtpService otpService;
-    private final VerificationSessionService sessions;
 
     public LabRegisterController(UserRepository users, LabDao labs, DistrictDao districts,
-                                 PasswordEncoder encoder, MessageSource messages,
-                                 OtpService otpService, VerificationSessionService sessions) {
+                                 PasswordEncoder encoder, MessageSource messages) {
         this.users = users;
         this.labs = labs;
         this.districts = districts;
         this.encoder = encoder;
         this.messages = messages;
-        this.otpService = otpService;
-        this.sessions = sessions;
     }
 
     /**
@@ -108,12 +101,12 @@ public class LabRegisterController {
         user.setUsername(username);
         user.setPassword(encoder.encode(params.get("password")));
         user.setRole("LAB");
-        // PART B: same identity rules as a farmer - the account starts unverified
-        // and cannot log in until the phone is verified (and the owner approves).
+        // Verification is disabled by requirement: lab accounts are created
+        // ready for login once ownership approval is granted.
         user.setEmail(email);
         user.setPhone(phone);
-        user.setPhoneVerified(false);
-        user.setEmailVerified(false);
+        user.setPhoneVerified(true);
+        user.setEmailVerified(true);
         users.save(user);
 
         Lab lab = new Lab();
@@ -130,13 +123,9 @@ public class LabRegisterController {
         lab.setLon(parseDouble(params.get("lon")));
         labs.insert(lab);
 
-        // Same phone-verification flow as the farmer registration.
-        otpService.issue(user.getId(), phone);
-        String handle = sessions.create(user.getId());
-
-        log.info("[REG] Lab '{}' registered (district={}, status=PENDING), phone verification sent",
+        log.info("[REG] Lab '{}' registered (district={}, status=PENDING) without SMS or email verification",
                 lab.getName(), lab.getDistrict());
-        return "redirect:/verify?h=" + handle;
+        return "redirect:/login?registered";
     }
 
     /** Server-side rules shared shape with RegisterController. */

@@ -6,8 +6,6 @@ import com.precisionfarming.advisory_service.model.User;
 import com.precisionfarming.advisory_service.repository.DistrictDao;
 import com.precisionfarming.advisory_service.repository.FarmerProfileDao;
 import com.precisionfarming.advisory_service.repository.UserRepository;
-import com.precisionfarming.advisory_service.service.OtpService;
-import com.precisionfarming.advisory_service.service.VerificationSessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
@@ -40,20 +38,15 @@ public class RegisterController {
     private final DistrictDao districts;
     private final PasswordEncoder encoder;
     private final MessageSource messages;
-    private final OtpService otpService;
-    private final VerificationSessionService sessions;
 
     public RegisterController(UserRepository users, FarmerProfileDao profiles,
                               DistrictDao districts, PasswordEncoder encoder,
-                              MessageSource messages, OtpService otpService,
-                              VerificationSessionService sessions) {
+                              MessageSource messages) {
         this.users = users;
         this.profiles = profiles;
         this.districts = districts;
         this.encoder = encoder;
         this.messages = messages;
-        this.otpService = otpService;
-        this.sessions = sessions;
     }
 
     /**
@@ -111,12 +104,12 @@ public class RegisterController {
         user.setUsername(username);
         user.setPassword(encoder.encode(params.get("password")));
         user.setRole("FARMER");
-        // PART B: the account starts UNVERIFIED and cannot log in until the
-        // phone is verified (SecurityConfig disables such an account).
+        // Verification is disabled by requirement: new users are immediately
+        // allowed to log in without SMS or email confirmation.
         user.setEmail(email);
         user.setPhone(mobile);
-        user.setPhoneVerified(false);
-        user.setEmailVerified(false);
+        user.setPhoneVerified(true);
+        user.setEmailVerified(true);
         users.save(user);
 
         FarmerProfile p = new FarmerProfile();
@@ -135,14 +128,9 @@ public class RegisterController {
         p.setPreferredLang(params.getOrDefault("lang", "en"));
         profiles.insert(p);
 
-        // Send the 6-digit code (demo sender by default: no SMS) and hand the
-        // account a one-time handle so the verify page can identify it.
-        otpService.issue(user.getId(), mobile);
-        String handle = sessions.create(user.getId());
-
-        log.info("[REG] Farmer '{}' registered (district={}), phone verification sent",
+        log.info("[REG] Farmer '{}' registered (district={}) without SMS or email verification",
                 username, p.getDistrict());
-        return "redirect:/verify?h=" + handle;
+        return "redirect:/login?registered";
     }
 
     /** Server-side rules. Returns field -> translated message (empty = all good). */

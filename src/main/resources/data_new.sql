@@ -327,82 +327,93 @@ FROM districts;
 --    The pages NEVER call the internet: they only read weather_cache and
 --    weather_forecast. A @Scheduled job fills those tables from
 --    greenalerts.in (Jsoup) with Open-Meteo as a fallback.
---    Everything below is SAMPLE data so the demo also works offline; the UI
---    marks each seeded row "SAMPLE" (is_sample = 1 / source = 'SAMPLE').
+--    No seed weather rows are kept in the repository. All weather values must
+--    come from the live scraper or the fallback source only.
 -- ---------------------------------------------------------------------
 
--- 6a. weather_config - the URLs the 3-hourly job watches. One row per
---     location. These are REAL block pages (verified live) so the scraper
---     has something real to read when the college wifi allows it.
---     Re-runnable: a row is only added when its URL is not already there.
+-- 6a. weather_config - the URLs the job watches. One row per district so the
+--     live scraper can refresh more of Maharashtra without an official API.
+--     District-level pages are used so the list stays broad and simple to maintain.
 INSERT INTO weather_config (state, district, taluka, scrape_url, source)
 SELECT t.state, t.district, t.taluka, t.url, 'GREENALERTS'
 FROM (
-    SELECT 'Maharashtra' AS state, 'Raigad'   AS district, 'Panvel'        AS taluka,
-           'https://www.greenalerts.in/weather-forecast-india/maharashtra/raigad/panvel/' AS url
-    UNION ALL SELECT 'Maharashtra', 'Pune',     'Haveli',
-                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/pune/haveli/'
-    UNION ALL SELECT 'Maharashtra', 'Pune',     'Baramati',
-                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/pune/baramati/'
-    UNION ALL SELECT 'Maharashtra', 'Nashik',   'Igatpuri',
-                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nashik/igatpuri/'
-    UNION ALL SELECT 'Maharashtra', 'Nagpur',   'Kamptee',
-                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nagpur/kamptee/'
-    UNION ALL SELECT 'Maharashtra', 'Kolhapur', 'Hatkanangale',
-                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/kolhapur/hatkanangale/'
+    SELECT 'Maharashtra' AS state, 'Ahmednagar' AS district, 'Ahmednagar' AS taluka,
+           'https://www.greenalerts.in/weather-forecast-india/maharashtra/ahmednagar/' AS url
+    UNION ALL SELECT 'Maharashtra', 'Akola', 'Akola',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/akola/'
+    UNION ALL SELECT 'Maharashtra', 'Amravati', 'Amravati',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/amravati/'
+    UNION ALL SELECT 'Maharashtra', 'Aurangabad', 'Aurangabad',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/aurangabad/'
+    UNION ALL SELECT 'Maharashtra', 'Beed', 'Beed',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/beed/'
+    UNION ALL SELECT 'Maharashtra', 'Bhandara', 'Bhandara',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/bhandara/'
+    UNION ALL SELECT 'Maharashtra', 'Buldhana', 'Buldhana',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/buldhana/'
+    UNION ALL SELECT 'Maharashtra', 'Chandrapur', 'Chandrapur',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/chandrapur/'
+    UNION ALL SELECT 'Maharashtra', 'Dhule', 'Dhule',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/dhule/'
+    UNION ALL SELECT 'Maharashtra', 'Gadchiroli', 'Gadchiroli',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/gadchiroli/'
+    UNION ALL SELECT 'Maharashtra', 'Gondia', 'Gondia',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/gondia/'
+    UNION ALL SELECT 'Maharashtra', 'Hingoli', 'Hingoli',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/hingoli/'
+    UNION ALL SELECT 'Maharashtra', 'Jalgaon', 'Jalgaon',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/jalgaon/'
+    UNION ALL SELECT 'Maharashtra', 'Jalna', 'Jalna',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/jalna/'
+    UNION ALL SELECT 'Maharashtra', 'Kolhapur', 'Kolhapur',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/kolhapur/'
+    UNION ALL SELECT 'Maharashtra', 'Latur', 'Latur',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/latur/'
+    UNION ALL SELECT 'Maharashtra', 'Mumbai City', 'Mumbai City',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/mumbai-city/'
+    UNION ALL SELECT 'Maharashtra', 'Mumbai Suburban', 'Mumbai Suburban',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/mumbai-suburban/'
+    UNION ALL SELECT 'Maharashtra', 'Nagpur', 'Nagpur',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nagpur/'
+    UNION ALL SELECT 'Maharashtra', 'Nanded', 'Nanded',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nanded/'
+    UNION ALL SELECT 'Maharashtra', 'Nandurbar', 'Nandurbar',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nandurbar/'
+    UNION ALL SELECT 'Maharashtra', 'Nashik', 'Nashik',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/nashik/'
+    UNION ALL SELECT 'Maharashtra', 'Osmanabad', 'Osmanabad',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/osmanabad/'
+    UNION ALL SELECT 'Maharashtra', 'Palghar', 'Palghar',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/palghar/'
+    UNION ALL SELECT 'Maharashtra', 'Parbhani', 'Parbhani',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/parbhani/'
+    UNION ALL SELECT 'Maharashtra', 'Pune', 'Pune',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/pune/'
+    UNION ALL SELECT 'Maharashtra', 'Raigad', 'Raigad',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/raigad/'
+    UNION ALL SELECT 'Maharashtra', 'Ratnagiri', 'Ratnagiri',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/ratnagiri/'
+    UNION ALL SELECT 'Maharashtra', 'Sangli', 'Sangli',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/sangli/'
+    UNION ALL SELECT 'Maharashtra', 'Satara', 'Satara',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/satara/'
+    UNION ALL SELECT 'Maharashtra', 'Sindhudurg', 'Sindhudurg',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/sindhudurg/'
+    UNION ALL SELECT 'Maharashtra', 'Solapur', 'Solapur',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/solapur/'
+    UNION ALL SELECT 'Maharashtra', 'Thane', 'Thane',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/thane/'
+    UNION ALL SELECT 'Maharashtra', 'Wardha', 'Wardha',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/wardha/'
+    UNION ALL SELECT 'Maharashtra', 'Washim', 'Washim',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/washim/'
+    UNION ALL SELECT 'Maharashtra', 'Yavatmal', 'Yavatmal',
+                    'https://www.greenalerts.in/weather-forecast-india/maharashtra/yavatmal/'
 ) t
 LEFT JOIN weather_config w ON w.scrape_url = t.url
 WHERE w.id IS NULL;
 
--- 6b. SAMPLE current weather for ALL 36 districts, so /nowcast, /forecast and
---     the /map colour layer all work with the network unplugged.
---     The values come from each district's approximate latitude/longitude
---     (cooler to the north, more humid towards the coast) - they are only a
---     plausible pattern, never a real observation, and are labelled SAMPLE.
---     Re-runnable: one SAMPLE row per district, skipped when already present.
-INSERT INTO weather_cache
-    (config_id, timestamp, temperature, rain_chance, humidity, wind,
-     daily_forecast, source, district, taluka, state, summary, is_sample)
-SELECT NULL, NOW(),
-       CONCAT(GREATEST(18, LEAST(38, ROUND(34 - (d.lat - 16) * 1.6))), ' °C'),
-       '0 mm',
-       CONCAT(GREATEST(30, LEAST(92, ROUND(88 - (d.lon - 72.8) * 7.5))), ' %'),
-       '6 km/h',
-       NULL, 'SAMPLE', d.name_en, NULL, 'Maharashtra',
-       'SAMPLE reading for the offline demo', 1
-FROM districts d
-WHERE NOT EXISTS (
-    SELECT 1 FROM weather_cache c
-    WHERE c.district = d.name_en AND c.is_sample = 1
-);
-
--- 6c. SAMPLE 7-day forecast for the six watched locations (the ones the
---     scraper knows a real block page for). Written for today + the next six
---     days. The scheduler overwrites a row in place once the real forecast
---     for that day arrives (ON DUPLICATE KEY UPDATE on the unique key
---     district + taluka + day), so a sample row never blocks a real one.
-INSERT IGNORE INTO weather_forecast
-    (district, taluka, forecast_day, temp_min, temp_max, rain_chance,
-     humidity, wind, summary, source, updated_at)
-WITH RECURSIVE d7(n) AS (
-    SELECT 0 UNION ALL SELECT n + 1 FROM d7 WHERE n < 6
-)
-SELECT loc.d, loc.t, DATE_ADD(CURDATE(), INTERVAL d7.n DAY),
-       CONCAT(23 + MOD(CRC32(CONCAT(loc.d, d7.n, 'min')), 4), ' °C'),
-       CONCAT(32 + MOD(CRC32(CONCAT(loc.d, d7.n, 'max')), 5), ' °C'),
-       CONCAT(MOD(CRC32(CONCAT(loc.t, d7.n, 'rain')), 60), ' %'),
-       CONCAT(65 + MOD(CRC32(CONCAT(loc.d, d7.n, 'hum')), 20), ' %'),
-       CONCAT(5 + MOD(CRC32(CONCAT(loc.t, d7.n, 'wind')), 9), ' km/h'),
-       'SAMPLE forecast row - not a real forecast', 'SAMPLE', NOW()
-FROM (
-    SELECT 'Raigad'   AS d, 'Panvel'        AS t
-    UNION ALL SELECT 'Pune',     'Haveli'
-    UNION ALL SELECT 'Pune',     'Baramati'
-    UNION ALL SELECT 'Nashik',   'Igatpuri'
-    UNION ALL SELECT 'Nagpur',   'Kamptee'
-    UNION ALL SELECT 'Kolhapur', 'Hatkanangale'
-) loc
-CROSS JOIN d7;
+-- Live data only: no SAMPLE weather cache or SAMPLE forecast rows are kept in SQL seed scripts.
 
 -- =====================================================================
 -- 7. ALERTS - the rows store MESSAGE KEYS, never sentences.
